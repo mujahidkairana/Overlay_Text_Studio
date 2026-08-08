@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from overlay_studio.ass import build_ass
+from overlay_studio.ass import _estimated_text_width, build_ass
 from overlay_studio.layout import plan_layout_and_styles
 from overlay_studio.media import extract_analysis_frames, ffmpeg_path, ffprobe_path, probe_video
 from overlay_studio.models import OverlayEntry, ProjectSettings, VideoInfo
@@ -125,6 +125,33 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(entry.reading_status, "TOO_FAST")
         self.assertEqual(entry.effect, "PROTECTED_PLATE")
         self.assertIn("OverlayPlate", build_ass([entry], settings))
+
+    def test_protected_plate_is_rounded_vector_with_centered_text(self):
+        entry = OverlayEntry(
+            "PLATE", 0, 60, "LOOKS LIKE PROOF?",
+            resolved_position="TOP_LEFT", font_size_px=80,
+            wrapped_text="LOOKS LIKE PROOF?", animation="EASE_UP",
+            effect="PROTECTED_PLATE",
+        )
+        output = build_ass(
+            [entry], ProjectSettings(output_width=1920, output_height=1080)
+        )
+        dialogue_lines = [
+            line for line in output.splitlines() if line.startswith("Dialogue:")
+        ]
+        self.assertEqual(len(dialogue_lines), 2)
+        self.assertIn("Dialogue: 0", dialogue_lines[0])
+        self.assertIn("\\p1", dialogue_lines[0])
+        self.assertIn(" b ", dialogue_lines[0])
+        self.assertIn("\\an5", dialogue_lines[0])
+        self.assertIn("Dialogue: 1", dialogue_lines[1])
+        self.assertIn("\\an5", dialogue_lines[1])
+        self.assertNotIn("BorderStyle, 3", output)
+
+    def test_plate_width_estimate_stays_snug_for_youtube_heading(self):
+        width = _estimated_text_width("LOOKS LIKE PROOF?", 77)
+        self.assertGreaterEqual(width, 520)
+        self.assertLessEqual(width, 600)
 
     def test_overlapping_entries_choose_different_positions(self):
         with tempfile.TemporaryDirectory() as temp_string:
