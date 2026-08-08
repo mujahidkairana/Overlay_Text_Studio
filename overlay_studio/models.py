@@ -113,6 +113,7 @@ class ProjectSettings:
     style_preset: str = "YOUTUBE_PRO"
     parallel_analysis_workers: int = 4
     scene_cut_frames: list[int] = field(default_factory=list)
+    scene_analysis_available: bool = True
     density_preset: str = "STANDARD"
     sfx_folder: str = ""
 

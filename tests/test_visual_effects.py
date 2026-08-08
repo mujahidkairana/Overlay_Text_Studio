@@ -9,6 +9,7 @@ from pathlib import Path
 from overlay_studio.media import ffmpeg_path, ffprobe_path, probe_video
 from overlay_studio.models import OverlayEntry, ProjectSettings
 from overlay_studio.render import (
+    _final_audio_codec_args,
     _relative_action_intervals,
     _sfx_mix_filter,
     _video_filter,
@@ -54,6 +55,15 @@ class VisualEffectFilterTests(unittest.TestCase):
         )
         self.assertIn("-0.06", result)
         self.assertIn("between(t", result)
+        self.assertIn("(t-0.000000)/0.250000", result)
+        self.assertIn("(2.000000-t)/0.250000", result)
+
+    def test_audio_is_copied_without_sfx_and_encoded_only_for_mix(self):
+        self.assertEqual(_final_audio_codec_args(False), ["-c:a", "copy"])
+        self.assertEqual(
+            _final_audio_codec_args(True),
+            ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"],
+        )
 
     def test_punch_in_render_preserves_exact_frame_count(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -111,6 +111,11 @@ def plan_editorial_actions(
         else:
             requested = "NONE"
 
+        if not settings.scene_analysis_available and requested in STRONG_ACTIONS:
+            requested = "NONE"
+        if requested == "FREEZE" and entry.priority != "HIGH":
+            requested = "NONE"
+
         unsafe_motion = (
             entry.confidence == "REVIEW"
             or entry.motion_score >= 0.10
@@ -143,7 +148,7 @@ def plan_editorial_actions(
                 requested = "NONE"
 
         internal_cuts = cuts_inside(settings.scene_cut_frames, entry.start_frame, entry.end_frame)
-        if requested in STRONG_ACTIONS and internal_cuts:
+        if requested in STRONG_ACTIONS | MEDIUM_ACTIONS and internal_cuts:
             entry.action_end_frame = internal_cuts[0]
         if requested == "FREEZE":
             if freeze_count >= freeze_cap:

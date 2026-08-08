@@ -10,10 +10,11 @@ IMPLEMENTED PHASES
 - Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
 AUTOMATED AND RENDER VALIDATION
-- Full 69-test unittest suite passes on the bundled Windows runtime.
+- Full 73-test unittest suite passes on the bundled Windows runtime.
 - Headless Streamlit startup completes with zero UI exceptions.
 - Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
 - Scene analysis uses `-fps_mode vfr`; a simulated analysis failure continues safely with a warning.
+- Failed scene analysis now persistently disables punch/freeze actions while safe overlays continue.
 - Punch-in render preserves exactly 60 frames for a 2-second 30-fps clip.
 - In-place freeze preserves 2.0-second duration, 60 frames, and source audio.
 - Multiple freezes in one chunk preserve exact duration, 120 frames, and audio.
@@ -51,6 +52,10 @@ EDITORIAL / VIEWER ACCEPTANCE
   rounded-plate coverage, contrast, consistency, and caption-safe placement.
 - Punch-in ramps are smooth, DIM_FOCUS and SFX have separate cooldowns, short
   WARNING plates include the CAUTION label width, and auto output matches source resolution.
+- DIM_FOCUS eases in/out and stops at scene cuts; FREEZE requires HIGH priority.
+- Fresh projects benchmark encoders automatically. No-SFX exports stream-copy
+  source audio, with an automatic AAC compatibility fallback when required.
+- Pre-flight uses a yellow SRT state for nonfatal timing warnings instead of a green claim.
 
 WINDOWS SMOKE STATUS
 - Tests ran on Windows using the application's configured shared Python and FFmpeg.
