@@ -1,2 +1,2 @@
-Overlay Text Studio v2.1.0
-Portable GitHub-ready automatic workflow
+Overlay Text Studio v2.2.0
+Professional YouTube overlays and faster automatic workflow

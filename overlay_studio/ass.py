@@ -66,15 +66,29 @@ def _anchor(entry: OverlayEntry, settings: ProjectSettings) -> tuple[int, int, i
     return 7, side, y
 
 
-def _effect_tags(entry: OverlayEntry) -> str:
+def _effect_tags(entry: OverlayEntry, settings: ProjectSettings) -> str:
+    scale = settings.output_height / 1080.0
+    clean_border = max(2, round(3.0 * scale))
+    strong_border = max(clean_border + 1, round(4.5 * scale))
+    shadow = max(1, round(2.0 * scale))
     if entry.effect == "STRONG_OUTLINE":
-        return r"\bord7\shad2\blur0.35\3c&H000000&\4c&H000000&\4a&H45&"
-    if entry.effect == "SOFT_GLOW":
-        return r"\bord4\shad7\blur0.8\3c&H101010&\4c&H000000&\4a&H68&"
-    return r"\bord4\shad4\blur0.25\3c&H000000&\4c&H000000&\4a&H48&"
+        return (
+            f"\\bord{strong_border}\\shad{shadow}\\blur0.18"
+            r"\3c&H000000&\4c&H000000&\4a&H58&"
+        )
+    return (
+        f"\\bord{clean_border}\\shad{shadow}\\blur0.12"
+        r"\3c&H080808&\4c&H000000&\4a&H68&"
+    )
 
 
-def _motion_tags(entry: OverlayEntry, x: int, y: int, alignment: int) -> str:
+def _motion_tags(
+    entry: OverlayEntry,
+    x: int,
+    y: int,
+    alignment: int,
+    settings: ProjectSettings,
+) -> str:
     duration_ms = max(1, round(entry.duration_seconds * 1000))
     intro_ms = min(300, max(150, round(duration_ms * 0.12)))
     outro_ms = min(230, max(130, round(duration_ms * 0.09)))
@@ -84,17 +98,18 @@ def _motion_tags(entry: OverlayEntry, x: int, y: int, alignment: int) -> str:
     movement_x = 0
     movement_y = 0
     transform = ""
-    if entry.animation == "SLIDE_IN":
-        movement_x = -95 if alignment == 7 else (95 if alignment == 9 else -60)
-    elif entry.animation == "FADE_RISE":
-        movement_y = 46
-    elif entry.animation == "GENTLE_DROP":
-        movement_y = -38
-    elif entry.animation == "SHORT_DRIFT":
-        movement_x = -35 if alignment != 9 else 35
-        movement_y = 18
-    elif entry.animation == "SOFT_POP":
-        transform = f"\\fscx82\\fscy82\\t(0,{intro_ms},\\fscx100\\fscy100)"
+    if entry.animation in {"EASE_SIDE", "SLIDE_IN", "SHORT_DRIFT"}:
+        distance = max(12, round(settings.output_width * 0.008))
+        movement_x = -distance if alignment != 9 else distance
+    elif entry.animation in {"EASE_UP", "FADE_RISE", "GENTLE_DROP"}:
+        movement_y = max(10, round(settings.output_height * 0.012))
+    elif entry.animation in {"SOFT_SCALE", "SOFT_POP"}:
+        transform = (
+            f"\\fscx94\\fscy94"
+            f"\\t(0,{intro_ms},0.55,\\fscx100\\fscy100)"
+        )
+    elif entry.animation == "FOCUS_IN":
+        transform = f"\\blur1.25\\t(0,{intro_ms},0.55,\\blur0.12)"
 
     if movement_x or movement_y:
         position_tag = f"\\move({x + movement_x},{y + movement_y},{x},{y},0,{intro_ms})"
@@ -144,8 +159,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         alignment, x, y = _anchor(entry, settings)
         tags = (
             f"\\fs{entry.font_size_px}"
-            + _effect_tags(entry)
-            + _motion_tags(entry, x, y, alignment)
+            + _effect_tags(entry, settings)
+            + _motion_tags(entry, x, y, alignment, settings)
+            + f"\\fsp{max(0, round(settings.output_height / 1080.0))}"
             + f"\\c{normal_color}"
         )
         text = _render_text(entry, settings)
@@ -182,4 +198,3 @@ def write_ass(
         encoding="utf-8-sig",
     )
     return destination
-

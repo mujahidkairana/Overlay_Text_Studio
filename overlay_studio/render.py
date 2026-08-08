@@ -59,6 +59,8 @@ def _encoder_args(settings: ProjectSettings) -> list[str]:
         settings.x264_preset,
         "-crf",
         str(settings.crf),
+        "-tune",
+        "stillimage",
     ]
 
 

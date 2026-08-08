@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import random
 import time
 from pathlib import Path
@@ -57,8 +58,8 @@ def _initial_state() -> None:
         "project_path": "",
         "final_output_path": "",
         "project_name": "Overlay_Project",
-        "resolution": "4K — 3840×2160",
-        "analysis_fps": 1.0,
+        "resolution": "Auto — match source",
+        "analysis_fps": 0.5,
         "font_name": "Segoe UI Semibold",
         "accent_color": "#FFD84D",
         "safe_top_percent": 5.5,
@@ -131,17 +132,25 @@ def _path_row(label: str, key: str, types: list[tuple[str, str]] | None = None) 
         st.text_input(label, key=key)
 
 
-def _settings_from_ui(video_stem: str) -> ProjectSettings:
-    resolution = st.session_state.get("resolution", "4K — 3840×2160")
+def _settings_from_ui(
+    video_stem: str,
+    source_width: int = 1920,
+    source_height: int = 1080,
+) -> ProjectSettings:
+    resolution = st.session_state.get("resolution", "Auto — match source")
     if resolution.startswith("1080p"):
         width, height = 1920, 1080
-    else:
+    elif resolution.startswith("4K"):
         width, height = 3840, 2160
+    elif source_height >= 1800 or source_width >= 3200:
+        width, height = 3840, 2160
+    else:
+        width, height = 1920, 1080
     return ProjectSettings(
         project_name=st.session_state.get("project_name") or video_stem,
         output_width=width,
         output_height=height,
-        analysis_fps=float(st.session_state.get("analysis_fps", 1.0)),
+        analysis_fps=float(st.session_state.get("analysis_fps", 0.5)),
         random_seed=int(st.session_state.get("random_seed", 20260807)),
         font_name=st.session_state.get("font_name", "Segoe UI Semibold"),
         accent_color=st.session_state.get("accent_color", "#FFD84D"),
@@ -150,7 +159,22 @@ def _settings_from_ui(video_stem: str) -> ProjectSettings:
         encoder=st.session_state.get("encoder", "libx264"),
         x264_preset=st.session_state.get("x264_preset", "veryfast"),
         crf=int(st.session_state.get("crf", 18)),
+        style_preset="YOUTUBE_PRO",
+        parallel_analysis_workers=min(4, max(1, (os.cpu_count() or 2) // 2)),
     )
+
+
+def _next_output_path(output_root: str, video_stem: str) -> Path:
+    root = Path(output_root).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    base = root / f"{video_stem}_WITH_OVERLAY_TEXT.mp4"
+    if not base.exists():
+        return base
+    for number in range(2, 1000):
+        candidate = root / f"{video_stem}_WITH_OVERLAY_TEXT_{number:02d}.mp4"
+        if not candidate.exists():
+            return candidate
+    raise ValueError("Could not choose a free automatic output filename.")
 
 
 def _run_progress(callable_with_progress):
@@ -209,7 +233,7 @@ _initial_state()
 st.title("Overlay Text Studio")
 st.caption("Offline animated overlays for 30‑fps YouTube long videos · exact timing · safe top placement · resumable export")
 st.markdown(
-    '<div class="safe-note">Your source video is never modified. The app creates a separate overlay version and keeps the resolved plan for review.</div>',
+    '<div class="safe-note">Recommended YouTube Pro settings are already selected. Add the two files and the app analyzes, styles, renders, and verifies the final video without intermediate questions.</div>',
     unsafe_allow_html=True,
 )
 
@@ -225,10 +249,23 @@ with st.expander("Continue an existing project", expanded=False):
 
 with st.sidebar:
     st.header("Output")
-    st.selectbox("Final resolution", ["4K — 3840×2160", "1080p — 1920×1080"], index=None, key="resolution")
+    st.selectbox(
+        "Final resolution",
+        ["Auto — match source", "1080p — 1920×1080", "4K — 3840×2160"],
+        index=None,
+        key="resolution",
+        help="Recommended: avoids slow, unnecessary upscaling while keeping native 4K sources in 4K.",
+    )
     st.color_picker("Accent color", key="accent_color")
     with st.expander("Advanced settings"):
-        st.selectbox("Safe-zone analysis", [1.0, 0.5, 2.0], index=None, key="analysis_fps", format_func=lambda x: f"{x:g} sample(s)/second")
+        st.selectbox(
+            "Safe-zone analysis",
+            [0.5, 1.0, 2.0],
+            index=None,
+            key="analysis_fps",
+            format_func=lambda x: f"{x:g} sample(s)/second",
+            help="0.5 is the recommended fast setting. Cached frames are reused.",
+        )
         st.text_input("Font family", key="font_name")
         st.slider("Top safe margin", min_value=4.0, max_value=10.0, step=0.5, key="safe_top_percent", help="Keeps text away from YouTube/player edges.")
         st.number_input("Random style seed", min_value=1, step=1, key="random_seed")
@@ -251,7 +288,7 @@ _path_row("Overlay timing CSV/XLSX", "timing_path", [("Timing sheet", "*.csv *.x
 with st.expander("Optional output location"):
     _path_row("Project and output folder", "output_root", None)
 
-if st.button("Create automatic overlay plan", type="primary", width="stretch"):
+if st.button("Create final YouTube video automatically", type="primary", width="stretch"):
     try:
         if not st.session_state.video_path.strip():
             raise MediaError("Choose a source video first.")
@@ -262,7 +299,11 @@ if st.button("Create automatic overlay plan", type="primary", width="stretch"):
             st.session_state.timing_path,
             video_duration_frames=video.duration_frames_30,
         )
-        settings = _settings_from_ui(Path(video.path).stem)
+        settings = _settings_from_ui(
+            Path(video.path).stem,
+            source_width=video.width,
+            source_height=video.height,
+        )
         settings.project_name = Path(video.path).stem
         project_dir = settings.project_dir(st.session_state.output_root)
         prepare_text_layout(entries, settings)
@@ -276,7 +317,13 @@ if st.button("Create automatic overlay plan", type="primary", width="stretch"):
                 duration_seconds=video.duration_seconds,
                 progress=progress,
             )
-            analyze_entries(entries, frames, sample_fps=settings.analysis_fps, progress=progress)
+            analyze_entries(
+                entries,
+                frames,
+                sample_fps=settings.analysis_fps,
+                progress=progress,
+                max_workers=settings.parallel_analysis_workers,
+            )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
             return frames
 
@@ -294,7 +341,33 @@ if st.button("Create automatic overlay plan", type="primary", width="stretch"):
             entries=entries,
             settings=settings,
         )
-        st.success(f"Automatic plan created for {len(entries)} overlays. The caption area is protected.")
+        output_path = _next_output_path(
+            st.session_state.output_root, Path(video.path).stem
+        )
+        st.session_state.final_output_path = str(output_path)
+        cancel_file = project_dir / "STOP_RENDER.REQUEST"
+        cancel_file.unlink(missing_ok=True)
+        ensure_free_space(project_dir, video, settings)
+
+        def automatic_render(progress):
+            return render_full_resumable(
+                video,
+                entries,
+                settings,
+                output_path=output_path,
+                project_dir=project_dir,
+                app_root=APP_ROOT,
+                progress=progress,
+                cancel_check=cancel_file.exists,
+            )
+
+        final_path = _run_progress(automatic_render)
+        st.success(
+            f"Professional YouTube overlay video verified and ready: {final_path}"
+        )
+        st.video(str(final_path))
+    except RenderCancelled as exc:
+        st.warning(str(exc))
     except (TimingValidationError, MediaError, OSError, ValueError) as exc:
         st.error(str(exc))
 
@@ -373,7 +446,10 @@ if st.session_state.edited_table is not None:
     st.subheader("3. Preview one overlay")
     scene_ids = [entry.scene_id for entry in entries if entry.enabled]
     selected_id = st.selectbox("Overlay to preview", scene_ids)
-    preview_quality = st.selectbox("Preview quality", ["720p (fast)", "1080p"])
+    preview_quality = st.selectbox(
+        "Preview quality",
+        ["1080p (recommended for sharpness)", "720p (timing only)"],
+    )
     if st.button("Render selected preview", width="stretch"):
         try:
             apply_edited_table(entries, edited)

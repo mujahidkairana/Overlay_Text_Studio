@@ -124,12 +124,12 @@ def prepare_text_layout(
 
 def compatible_animations(position: str, duration_seconds: float) -> tuple[str, ...]:
     if duration_seconds < 0.9:
-        return ("FADE_RISE",)
+        return ("FADE_ONLY",)
     if duration_seconds < 1.4:
-        return ("FADE_RISE", "SLIDE_IN", "SOFT_POP")
+        return ("EASE_UP", "SOFT_SCALE", "FADE_ONLY")
     if position == "TOP_CENTER":
-        return ("FADE_RISE", "SOFT_POP", "GENTLE_DROP", "SHORT_DRIFT")
-    return ("FADE_RISE", "SLIDE_IN", "SOFT_POP", "SHORT_DRIFT")
+        return ("EASE_UP", "SOFT_SCALE", "FOCUS_IN", "FADE_ONLY")
+    return ("EASE_UP", "EASE_SIDE", "SOFT_SCALE", "FOCUS_IN", "FADE_ONLY")
 
 
 def plan_layout_and_styles(
@@ -141,7 +141,6 @@ def plan_layout_and_styles(
     planned = list(entries)
     rng = random.Random(settings.random_seed + reroll * 104729)
     animation_bag = ShuffleBag(ANIMATIONS, rng)
-    effect_bag = ShuffleBag(EFFECTS, rng)
 
     prepare_text_layout(planned, settings)
 
@@ -153,7 +152,9 @@ def plan_layout_and_styles(
                 compatible_animations(entry.resolved_position, entry.duration_seconds)
             )
         if entry.effect == "AUTO" or not entry.lock_style:
-            entry.effect = effect_bag.next(EFFECTS)
+            # YouTube Pro keeps one coherent visual language. Accent is used
+            # sparingly; glow is deliberately excluded because it softens edges.
+            entry.effect = "ACCENT_WORD" if rng.random() < 0.20 else "CLEAN_SHADOW"
         if entry.confidence == "REVIEW":
             entry.effect = "STRONG_OUTLINE"
         entry.accent_word = choose_accent_word(entry.text) if entry.effect == "ACCENT_WORD" else ""

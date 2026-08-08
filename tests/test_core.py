@@ -86,6 +86,27 @@ class PlanningTests(unittest.TestCase):
         output = build_ass([entry], ProjectSettings(output_width=1920, output_height=1080))
         self.assertIn("0:00:00.03,0:00:00.06", output)
 
+    def test_professional_scale_animation_avoids_aggressive_pixelating_pop(self):
+        entry = OverlayEntry(
+            "A", 0, 60, "CRISP TEXT", resolved_position="TOP_CENTER",
+            font_size_px=80, wrapped_text="CRISP TEXT",
+            animation="SOFT_SCALE", effect="CLEAN_SHADOW",
+        )
+        output = build_ass([entry], ProjectSettings(output_width=1920, output_height=1080))
+        self.assertIn("\\fscx94\\fscy94", output)
+        self.assertNotIn("\\fscx82", output)
+        self.assertNotIn("SOFT_GLOW", output)
+
+    def test_outline_scales_with_output_resolution(self):
+        entry = OverlayEntry(
+            "A", 0, 60, "TEXT", font_size_px=80, wrapped_text="TEXT",
+            animation="FADE_ONLY", effect="CLEAN_SHADOW",
+        )
+        hd = build_ass([entry], ProjectSettings(output_width=1920, output_height=1080))
+        uhd = build_ass([entry], ProjectSettings(output_width=3840, output_height=2160))
+        self.assertIn("\\bord3", hd)
+        self.assertIn("\\bord6", uhd)
+
     def test_safe_region_expands_for_longer_rendered_text(self):
         short = OverlayEntry("S", 0, 60, "SHORT")
         long = OverlayEntry(

@@ -1,4 +1,4 @@
-# Overlay Text Studio v2.1
+# Overlay Text Studio v2.2
 
 ## Development branches
 
@@ -79,10 +79,10 @@ Start is inclusive and end is exclusive. Frame fields must be `00–29`. Integer
 ## Recommended workflow
 
 1. Select the source video and timing sheet.
-2. Click **Create automatic overlay plan**. Validation, sizing, safe placement,
-   caption clearance, animation, and contrast protection run automatically.
-3. Optionally inspect the plan or render a preview.
-4. Export using the recommended CPU encoder. Success is shown only after verification.
+2. Click **Create final YouTube video automatically**. Validation, native
+   resolution selection, sizing, parallel safe placement, professional styling,
+   rendering, and verification run without intermediate questions.
+3. Optional manual review and preview controls remain available after completion.
 
 Use **Continue an existing project** and select its `project.json` to resume later. The saved random seed and styles are restored, so unchanged chunks remain reusable. If a render is stopped, start the same export again to reuse completed chunks.
 
@@ -91,7 +91,10 @@ Use **Continue an existing project** and select its `project.json` to resume lat
 - Safe zones expand from roughly 40% to 86% of frame width according to the rendered text, including outline/shadow breathing room.
 - Safe scoring samples the complete overlay interval and penalizes detail, edges, motion, contrast, and faces.
 - The selected position remains stable after the short entrance; it never chases the subject frame by frame.
-- Animations/effects use seeded shuffle bags: no fixed order and no immediate animation repeat.
+- The YouTube Pro preset uses restrained crisp effects and avoids adjacent
+  animation repetition.
+- Borders, shadows, spacing, and movement scale with output resolution.
+- Analysis uses a cached half-rate frame pass and up to four parallel workers.
 - Text normally uses one or two balanced lines. Very long lines can shrink to about 69 px at 4K and are flagged to shorten.
 - Entrance motion is short, rest time is dominant, and exit is a restrained fade.
 
