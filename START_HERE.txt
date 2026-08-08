@@ -15,6 +15,11 @@ EVERYDAY USE
 3. The app validates subtitle reading load, analyzes, styles, renders, and verifies the result without stopping
    for intermediate questions.
 4. Rendering continues in the background. Stop/Resume preserves valid chunks.
+5. Open "Creative Variation Report" to review event density and effect usage.
+
+OPTIONAL LOCAL SFX
+Place licensed WAV files in assets\sfx or the project's sfx folder. Missing
+files are skipped safely and never downloaded automatically.
 
 CONTINUE LATER
 Open the saved project.json from "Continue an existing project".

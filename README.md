@@ -86,8 +86,9 @@ editorial intent without requiring any cloud service:
 | `SFX` | `NONE` | `SOFT_HIT` |
 | `LOCK_STYLE` | `FALSE` | `TRUE` |
 
-`VISUAL_ACTION` and `SFX` are persisted for later editorial phases; Phase 1
-does not render those treatments yet.
+`VISUAL_ACTION` supports timing-safe `PUNCH_IN`, `DIM_FOCUS`, and in-place
+`FREEZE` treatments. `SFX` uses optional local WAV files only; nothing is
+downloaded during normal use.
 
 Start is inclusive and end is exclusive. Frame fields must be `00–29`. Integer frame numbers are also accepted. Explicit `\N` or spreadsheet line breaks are allowed for a maximum of two lines; a third line is rejected with a clear row error instead of being silently removed.
 
@@ -120,6 +121,12 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Reading speed is measured; overly dense text receives a protected contrast plate.
 - Text normally uses one or two balanced lines. Very long lines can shrink to about 69 px at 4K and are flagged to shorten.
 - Entrance motion is short, rest time is dominant, and exit is a restrained fade.
+- A cached FFmpeg hard-cut pass prevents strong motion from crossing scene boundaries.
+- Calm, Standard, and Energetic density presets enforce cooldowns and quiet intervals.
+- Punch-ins are limited to a subtle 5%; focus dimming is mild and temporary.
+- Freeze emphasis replaces frames inside the existing timeline and never adds duration.
+- Optional local SFX are mixed quietly below narration with limiter protection.
+- `editorial_plan.json` and the in-app Creative Variation Report summarize editing patterns.
 
 ## Font-size guide at 4K
 
@@ -158,4 +165,7 @@ set /p RUNTIME_ROOT=<runtime_path.txt
 "%RUNTIME_ROOT%\Scripts\python.exe" -m unittest discover -s tests -v
 ```
 
-The suite covers exact 30-fps timing, three-line rejection, seeded randomization, dynamic safe-zone width, project seed restoration, unlimited port fallback, resume-safe chunking, rendering, full-duration short-audio remux, final frame count, and shared setup precedence.
+The suite covers SRT parsing, legacy/rich overlay schemas, scene-cut detection,
+density cooldowns, exact 30-fps timing, punch-in frame counts, in-place freeze
+duration/audio sync, conservative SFX mixing, resumable rendering, final
+verification, portable setup, and Streamlit startup.

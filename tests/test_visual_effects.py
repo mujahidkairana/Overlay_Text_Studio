@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 
 from overlay_studio.media import ffmpeg_path, ffprobe_path, probe_video
@@ -182,6 +183,9 @@ class VisualEffectFilterTests(unittest.TestCase):
                 ], capture_output=True, text=True,
             )
             self.assertIn("max_volume", levels.stderr)
+            match = re.search(r"max_volume:\s*(-?[0-9.]+) dB", levels.stderr)
+            self.assertIsNotNone(match)
+            self.assertLessEqual(float(match.group(1)), 0.0)
 
 
 if __name__ == "__main__":

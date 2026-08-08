@@ -1,2 +1,2 @@
 Overlay Text Studio v3.0.0
-Offline SRT-aware auto-enhance workflow and rich overlay schema
+Offline SRT-aware editorial planning, scene-safe effects, freeze, and local SFX

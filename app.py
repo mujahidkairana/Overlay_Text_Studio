@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from overlay_studio.editorial import plan_editorial_actions, write_editorial_report
+from overlay_studio.editorial import editorial_report, plan_editorial_actions, write_editorial_report
 from overlay_studio.layout import balanced_wrap, calculate_font_size, plan_layout_and_styles, prepare_text_layout
 from overlay_studio.media import MediaError, extract_analysis_frames, probe_video
 from overlay_studio.models import (
@@ -85,6 +85,7 @@ def _initial_state() -> None:
         "crf": 18,
         "render_status_path": "",
         "density_preset": "STANDARD",
+        "editorial_report": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -250,6 +251,10 @@ def _open_project(path_text: str) -> None:
     st.session_state.x264_preset = settings.x264_preset
     st.session_state.crf = settings.crf
     st.session_state.density_preset = settings.density_preset
+    report_path = path.parent / "editorial_plan.json"
+    st.session_state.editorial_report = (
+        json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
+    )
 
 
 _initial_state()
@@ -401,6 +406,9 @@ if st.button(
             )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
             plan_editorial_actions(entries, settings, captions=captions)
+            st.session_state.editorial_report = editorial_report(
+                entries, video.duration_seconds
+            )
             write_editorial_report(
                 project_dir / "editorial_plan.json", entries, video.duration_seconds
             )
@@ -487,6 +495,16 @@ if st.session_state.video_info is not None:
         st.warning("The timing sheet is 30 fps; export will be normalized to constant 30 fps.")
     for warning in st.session_state.warnings:
         st.warning(warning)
+    report = st.session_state.get("editorial_report")
+    if report:
+        with st.expander("Creative Variation Report", expanded=False):
+            r1, r2, r3, r4 = st.columns(4)
+            r1.metric("Events/min", report.get("events_per_minute", 0))
+            r2.metric("Punch-ins", report.get("punch_in_count", 0))
+            r3.metric("Freezes", report.get("freeze_count", 0))
+            r4.metric("Longest quiet gap", f"{report.get('longest_quiet_interval_seconds', 0):g}s")
+            st.caption("Local editing-pattern report only; this is not a monetization score.")
+            st.json(report, expanded=False)
 
 @st.fragment(run_every=2)
 def _render_monitor() -> None:
