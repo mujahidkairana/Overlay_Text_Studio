@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
 from pathlib import Path
 from typing import Iterable
@@ -48,6 +49,11 @@ def plan_editorial_actions(
     preset = settings.density_preset.upper()
     maximum_per_minute = DENSITY_STRONG_EVENTS_PER_MINUTE.get(preset, 3)
     recent_strong_frames: list[int] = []
+    freeze_count = 0
+    sfx_count = 0
+    total_frames = max((entry.end_frame for entry in planned), default=0)
+    freeze_cap = max(1, math.ceil(total_frames / settings.fps / 600.0 * 4))
+    sfx_cap = max(1, math.ceil(total_frames / settings.fps / 600.0 * 12))
     cooldown_frames = settings.fps * (12 if preset == "CALM" else 8 if preset == "STANDARD" else 5)
 
     for entry in planned:
@@ -77,23 +83,64 @@ def plan_editorial_actions(
         internal_cuts = cuts_inside(settings.scene_cut_frames, entry.start_frame, entry.end_frame)
         if requested in STRONG_ACTIONS and internal_cuts:
             entry.action_end_frame = internal_cuts[0]
+        if requested == "FREEZE":
+            if freeze_count >= freeze_cap:
+                requested = "NONE"
+            else:
+                entry.action_end_frame = min(
+                    entry.action_end_frame,
+                    entry.action_start_frame + round(settings.fps * 0.6),
+                )
+        if entry.sfx != "NONE":
+            if sfx_count >= sfx_cap:
+                entry.sfx = "NONE"
+            else:
+                sfx_count += 1
         if entry.action_end_frame - entry.action_start_frame < settings.fps // 2:
             requested = "NONE"
         entry.visual_action = requested
         if requested in STRONG_ACTIONS:
             recent_strong_frames.append(entry.start_frame)
+        if requested == "FREEZE":
+            freeze_count += 1
     return planned
 
 
 def editorial_report(entries: Iterable[OverlayEntry], duration_seconds: float) -> dict[str, object]:
     items = [entry for entry in entries if entry.enabled]
     minutes = max(duration_seconds / 60.0, 1 / 60.0)
+    position_counts = Counter(entry.resolved_position for entry in items)
+    animation_counts = Counter(entry.animation for entry in items)
+    action_counts = Counter(entry.visual_action for entry in items)
+    def percentages(counts: Counter[str]) -> dict[str, float]:
+        return {key: round(value / max(1, len(items)) * 100, 1) for key, value in counts.items()}
+
+    ordered = sorted(items, key=lambda entry: entry.start_frame)
+    longest_repeat = 0
+    current_repeat = 0
+    previous_pattern = None
+    for entry in ordered:
+        pattern = (entry.resolved_position, entry.animation, entry.visual_action)
+        current_repeat = current_repeat + 1 if pattern == previous_pattern else 1
+        longest_repeat = max(longest_repeat, current_repeat)
+        previous_pattern = pattern
+    gaps = [
+        round((second.start_frame - first.end_frame) / 30.0, 1)
+        for first, second in zip(ordered, ordered[1:])
+        if second.start_frame > first.end_frame
+    ]
     return {
         "overlay_events": len(items),
         "events_per_minute": round(len(items) / minutes, 2),
         "semantic_types": dict(Counter(entry.semantic_type for entry in items)),
-        "visual_actions": dict(Counter(entry.visual_action for entry in items)),
+        "position_usage_percent": percentages(position_counts),
+        "animation_usage_percent": percentages(animation_counts),
+        "visual_action_usage_percent": percentages(action_counts),
         "strong_actions": sum(entry.visual_action in STRONG_ACTIONS for entry in items),
+        "punch_in_count": action_counts.get("PUNCH_IN", 0),
+        "freeze_count": action_counts.get("FREEZE", 0),
+        "longest_repeated_pattern": longest_repeat,
+        "longest_quiet_interval_seconds": max(gaps, default=0.0),
     }
 
 
