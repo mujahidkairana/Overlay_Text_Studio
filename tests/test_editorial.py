@@ -201,6 +201,7 @@ class EditorialPlannerTests(unittest.TestCase):
                 entry, settings, 8, 960, 60
             )
             self.assertGreaterEqual(plate_width - text_width, entry.font_size_px // 2)
+            self.assertLessEqual(plate_width, round(text_width * 1.14))
 
 
 if __name__ == "__main__":
