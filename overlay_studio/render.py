@@ -568,20 +568,66 @@ def _concat_chunks(
         raise MediaError(completed.stderr.strip() or "Could not join rendered chunks.")
 
 
+def _sfx_roots(
+    settings: ProjectSettings,
+    project_dir: Path,
+    app_root: str | Path | None,
+) -> list[Path]:
+    roots: list[Path] = []
+    if settings.sfx_folder:
+        roots.append(Path(settings.sfx_folder).expanduser())
+    roots.append(project_dir / "sfx")
+    if app_root:
+        roots.append(Path(app_root) / "assets" / "sfx")
+    return roots
+
+
+def _has_license_note(root: Path) -> bool:
+    return any((root / name).is_file() for name in ("README.md", "LICENSES.txt", "LICENSE.txt"))
+
+
+def validate_sfx_assets(
+    entries: Iterable[OverlayEntry],
+    settings: ProjectSettings,
+    project_dir: str | Path,
+    app_root: str | Path | None,
+) -> list[str]:
+    warnings: list[str] = []
+    roots = _sfx_roots(settings, Path(project_dir), app_root)
+    requested = sorted(
+        {entry.sfx for entry in entries if entry.enabled and entry.sfx not in {"", "NONE", "AUTO"}}
+    )
+    for name in requested:
+        filename = name.lower() + ".wav"
+        matching = [root for root in roots if (root / filename).is_file()]
+        if not matching:
+            warnings.append(f"SFX {name}: {filename} was not found; no sound will be added.")
+        elif not any(_has_license_note(root) for root in matching):
+            warnings.append(
+                f"SFX {name}: add README.md or LICENSES.txt beside the WAV; unlicensed sound will be skipped."
+            )
+    return warnings
+
+
 def _resolve_sfx_events(
     entries: Iterable[OverlayEntry],
+    settings: ProjectSettings,
     project_dir: Path,
     app_root: str | Path | None,
 ) -> list[tuple[Path, int]]:
-    roots = [project_dir / "sfx"]
-    if app_root:
-        roots.append(Path(app_root) / "assets" / "sfx")
+    roots = _sfx_roots(settings, project_dir, app_root)
     events: list[tuple[Path, int]] = []
     for entry in entries:
         if not entry.enabled or entry.sfx in {"", "NONE", "AUTO"}:
             continue
         filename = entry.sfx.lower() + ".wav"
-        asset = next((root / filename for root in roots if (root / filename).is_file()), None)
+        asset = next(
+            (
+                root / filename for root in roots
+                if (root / filename).is_file() and _has_license_note(root)
+            ),
+            None,
+        )
         if asset is not None:
             events.append((asset, round(entry.start_frame / 30.0 * 1000)))
     return events
@@ -669,7 +715,7 @@ def render_full_resumable(
     temporary = destination.with_suffix(destination.suffix + ".part.mp4")
     temporary.unlink(missing_ok=True)
     if video.has_audio:
-        sfx_events = _resolve_sfx_events(entries, project, app_root)
+        sfx_events = _resolve_sfx_events(entries, settings, project, app_root)
         command = [
             ffmpeg_path(app_root),
             "-hide_banner",

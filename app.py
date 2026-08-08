@@ -32,6 +32,7 @@ from overlay_studio.render import (
     render_clip,
     render_full_resumable,
     select_fast_encoder,
+    validate_sfx_assets,
 )
 from overlay_studio.safety import analyze_entries
 from overlay_studio.scene_analysis import detect_scene_cuts
@@ -86,6 +87,7 @@ def _initial_state() -> None:
         "render_status_path": "",
         "density_preset": "STANDARD",
         "editorial_report": None,
+        "sfx_folder": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -184,6 +186,7 @@ def _settings_from_ui(
         style_preset="YOUTUBE_PRO",
         parallel_analysis_workers=min(4, max(1, (os.cpu_count() or 2) // 2)),
         density_preset=st.session_state.get("density_preset", "STANDARD"),
+        sfx_folder=st.session_state.get("sfx_folder", ""),
     )
 
 
@@ -251,6 +254,7 @@ def _open_project(path_text: str) -> None:
     st.session_state.x264_preset = settings.x264_preset
     st.session_state.crf = settings.crf
     st.session_state.density_preset = settings.density_preset
+    st.session_state.sfx_folder = settings.sfx_folder
     report_path = path.parent / "editorial_plan.json"
     st.session_state.editorial_report = (
         json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
@@ -336,6 +340,7 @@ _path_row("Subtitle SRT", "srt_path", [("Subtitles", "*.srt"), ("All files", "*.
 _path_row("Overlay timing CSV/XLSX", "timing_path", [("Timing sheet", "*.csv *.xlsx *.xlsm"), ("All files", "*.*")])
 with st.expander("Optional output location"):
     _path_row("Project and output folder", "output_root", None)
+    _path_row("Licensed local SFX folder", "sfx_folder", None)
 
 files_ready = bool(
     st.session_state.video_path.strip()
@@ -406,6 +411,7 @@ if st.button(
             )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
             plan_editorial_actions(entries, settings, captions=captions)
+            warnings.extend(validate_sfx_assets(entries, settings, project_dir, APP_ROOT))
             st.session_state.editorial_report = editorial_report(
                 entries, video.duration_seconds
             )
@@ -504,6 +510,10 @@ if st.session_state.video_info is not None:
             r3.metric("Freezes", report.get("freeze_count", 0))
             r4.metric("Longest quiet gap", f"{report.get('longest_quiet_interval_seconds', 0):g}s")
             st.caption("Local editing-pattern report only; this is not a monetization score.")
+            if report.get("density_status") == "OVER_TARGET":
+                st.warning(
+                    "The supplied overlay timing exceeds the recommended 4-7 events/minute in at least one interval. Extra strong effects were suppressed; source overlay rows were preserved."
+                )
             st.json(report, expanded=False)
 
 @st.fragment(run_every=2)

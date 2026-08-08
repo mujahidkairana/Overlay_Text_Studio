@@ -18,8 +18,9 @@ EVERYDAY USE
 5. Open "Creative Variation Report" to review event density and effect usage.
 
 OPTIONAL LOCAL SFX
-Place licensed WAV files in assets\sfx or the project's sfx folder. Missing
-files are skipped safely and never downloaded automatically.
+Choose a licensed local SFX folder in the app, or place licensed WAV files in
+assets\sfx. The folder must also contain README.md, LICENSES.txt, or LICENSE.txt.
+Missing or unlicensed files are skipped safely and never downloaded automatically.
 
 CONTINUE LATER
 Open the saved project.json from "Continue an existing project".

@@ -15,7 +15,7 @@ from overlay_studio.srt import (
     parse_srt_text,
     reading_load_warnings,
 )
-from overlay_studio.timing import load_entries
+from overlay_studio.timing import entries_to_table, load_entries
 
 
 class SRTTests(unittest.TestCase):
@@ -92,6 +92,19 @@ class RichOverlayAndPersistenceTests(unittest.TestCase):
         )
         self.assertEqual(entry.effect, "ACCENT_WORD")
         self.assertEqual(entry.accent_word, "WATER")
+
+    def test_resolved_plan_table_exposes_analysis_and_action_frames(self):
+        entry = OverlayEntry(
+            "A", 0, 60, "THE CLUE", section_cue=True,
+            motion_score=0.125, detail_score=0.375,
+            action_start_frame=15, action_end_frame=45,
+        )
+        row = entries_to_table([entry]).iloc[0]
+        self.assertTrue(row["SECTION_CUE"])
+        self.assertEqual(row["MOTION_SCORE"], 0.125)
+        self.assertEqual(row["DETAIL_SCORE"], 0.375)
+        self.assertEqual(row["ACTION_START_30FPS"], "00:00:00.15")
+        self.assertEqual(row["ACTION_END_30FPS"], "00:00:01.15")
 
     def test_old_project_loads_and_new_project_persists_srt_and_fields(self):
         with tempfile.TemporaryDirectory() as temporary:

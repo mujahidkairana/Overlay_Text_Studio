@@ -61,6 +61,9 @@ class OverlayEntry:
     sfx: str = "NONE"
     action_start_frame: int = 0
     action_end_frame: int = 0
+    section_cue: bool = False
+    motion_score: float = 0.0
+    detail_score: float = 0.0
     reading_cps: float = 0.0
     reading_status: str = "NOT_CHECKED"
 
@@ -106,6 +109,7 @@ class ProjectSettings:
     parallel_analysis_workers: int = 4
     scene_cut_frames: list[int] = field(default_factory=list)
     density_preset: str = "STANDARD"
+    sfx_folder: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

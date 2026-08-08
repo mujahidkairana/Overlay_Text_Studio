@@ -287,6 +287,8 @@ def analyze_entries(
                     chosen = close_alternative
         entry.resolved_position = chosen.position
         entry.safety_score = chosen.safety
+        entry.motion_score = round(chosen.motion, 4)
+        entry.detail_score = round(chosen.detail, 4)
         if chosen.safety >= 66:
             entry.confidence = "HIGH"
             entry.note = "Stable low-detail area"

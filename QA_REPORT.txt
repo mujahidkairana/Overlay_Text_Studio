@@ -10,12 +10,17 @@ IMPLEMENTED PHASES
 - Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
 AUTOMATED AND RENDER VALIDATION
-- Full unittest suite passes on the bundled Windows runtime.
+- Full 61-test unittest suite passes on the bundled Windows runtime.
 - Headless Streamlit startup completes with zero UI exceptions.
 - Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
 - Punch-in render preserves exactly 60 frames for a 2-second 30-fps clip.
 - In-place freeze preserves 2.0-second duration, 60 frames, and source audio.
+- Multiple freezes in one chunk preserve exact duration, 120 frames, and audio.
 - Local SFX mix preserves source duration and audio, uses 12% gain, and applies a limiter.
+- User SFX folders require WAV files plus a README/license record.
+- A real 10-minute acceptance render preserves 600 seconds, 18,000 frames, and audio.
+- The branch helper is tested against real local/bare repositories, increments
+  across features, rejects collisions, and emits slash-separated Windows dates.
 - End-to-end resumable render and short-source-audio regressions pass.
 - Final verification still checks duration, FPS, dimensions, and expected audio.
 
@@ -30,6 +35,17 @@ OFFLINE / SAFETY CHECK
 - The lower subtitle band remains protected even during SRT gaps.
 - Source audio is not ducked; optional local WAV SFX are mixed conservatively on top.
 - Missing optional SFX assets fall back safely to no added sound.
+
+EDITORIAL / VIEWER ACCEPTANCE
+- All specified semantic types have distinct, restrained visual treatments.
+- Long SRT gaps promote suitable existing overlays into section cues without
+  generating new claims or wording.
+- Measured motion/detail scores suppress strong effects in visually busy shots.
+- Rolling event density targets 4-7 per minute and reports over-target source data.
+- Calm/Standard/Energetic presets cap strong actions and SFX independently.
+- Resolved plan exports include action frames, section cues, motion, and detail scores.
+- A real-footage contact sheet was visually inspected for hierarchy, centering,
+  rounded-plate coverage, contrast, consistency, and caption-safe placement.
 
 WINDOWS SMOKE STATUS
 - Tests ran on Windows using the application's configured shared Python and FFmpeg.

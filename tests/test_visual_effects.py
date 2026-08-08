@@ -14,6 +14,7 @@ from overlay_studio.render import (
     _video_filter,
     render_clip,
     render_full_resumable,
+    validate_sfx_assets,
 )
 
 
@@ -140,6 +141,17 @@ class VisualEffectFilterTests(unittest.TestCase):
         self.assertIn("duration=first", rendered)
         self.assertIn("alimiter=limit=0.95", rendered)
 
+    def test_unlicensed_or_missing_sfx_is_reported_and_skipped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sfx = root / "sfx"
+            sfx.mkdir()
+            (sfx / "tick.wav").write_bytes(b"not needed for validation")
+            entry = OverlayEntry("A", 0, 30, "TICK", sfx="TICK")
+            settings = ProjectSettings(sfx_folder=str(sfx))
+            warnings = validate_sfx_assets([entry], settings, root / "project", ROOT)
+            self.assertTrue(any("LICENSES.txt" in warning for warning in warnings))
+
     def test_local_sfx_mix_preserves_source_duration_without_clipping(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -154,6 +166,7 @@ class VisualEffectFilterTests(unittest.TestCase):
             )
             sfx_dir = root / "project" / "sfx"
             sfx_dir.mkdir(parents=True)
+            (sfx_dir / "README.md").write_text("Self-created test tone.", encoding="utf-8")
             subprocess.run(
                 [
                     ffmpeg_path(ROOT), "-hide_banner", "-loglevel", "error", "-y",

@@ -358,6 +358,7 @@ class SetupFlowTests(unittest.TestCase):
         self.assertIn("$largest + 1", helper)
         self.assertIn("Branch already exists locally or on origin", helper)
         self.assertIn("[int]$Sequence = 0", helper)
+        self.assertIn('$today.Year, $today.Month, $today.Day', helper)
         self.assertIn("repository-wide", contributing)
 
     def test_versioned_shared_ffmpeg_layout_is_supported(self):

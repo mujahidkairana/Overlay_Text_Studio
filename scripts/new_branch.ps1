@@ -25,7 +25,8 @@ if (-not $featureSlug) {
     throw "Feature must contain at least one letter or number."
 }
 
-$date = Get-Date -Format "yyyy/MM/dd"
+$today = Get-Date
+$date = "{0:D4}/{1:D2}/{2:D2}" -f $today.Year, $today.Month, $today.Day
 $prefix = "$repositorySlug/$featureSlug/$date"
 
 & git fetch --prune origin 2>$null

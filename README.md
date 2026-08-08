@@ -88,7 +88,9 @@ editorial intent without requiring any cloud service:
 
 `VISUAL_ACTION` supports timing-safe `PUNCH_IN`, `DIM_FOCUS`, and in-place
 `FREEZE` treatments. `SFX` uses optional local WAV files only; nothing is
-downloaded during normal use.
+downloaded during normal use. In the app, an optional licensed SFX folder can
+be selected once; it must contain `README.md`, `LICENSES.txt`, or `LICENSE.txt`
+alongside its WAV files so the sound source remains auditable.
 
 Start is inclusive and end is exclusive. Frame fields must be `00–29`. Integer frame numbers are also accepted. Explicit `\N` or spreadsheet line breaks are allowed for a maximum of two lines; a third line is rejected with a clear row error instead of being silently removed.
 
@@ -123,6 +125,13 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Entrance motion is short, rest time is dominant, and exit is a restrained fade.
 - A cached FFmpeg hard-cut pass prevents strong motion from crossing scene boundaries.
 - Calm, Standard, and Energetic density presets enforce cooldowns and quiet intervals.
+- The planner targets 4-7 editorial events per rolling minute, reports unavoidable
+  over-target source overlays, and limits strong actions and SFX separately.
+- Long SRT pauses can promote an existing nearby overlay to a section cue; the app
+  never invents narration or overlay wording.
+- Measured motion and image detail automatically suppress aggressive effects.
+- Number, evidence, comparison, warning, uncertainty, takeaway, question, and
+  section overlays receive distinct restrained treatments.
 - Punch-ins are limited to a subtle 5%; focus dimming is mild and temporary.
 - Freeze emphasis replaces frames inside the existing timeline and never adds duration.
 - Optional local SFX are mixed quietly below narration with limiter protection.
@@ -166,6 +175,7 @@ set /p RUNTIME_ROOT=<runtime_path.txt
 ```
 
 The suite covers SRT parsing, legacy/rich overlay schemas, scene-cut detection,
-density cooldowns, exact 30-fps timing, punch-in frame counts, in-place freeze
-duration/audio sync, conservative SFX mixing, resumable rendering, final
-verification, portable setup, and Streamlit startup.
+density cooldowns, exact 30-fps timing, punch-in frame counts, multiple in-place
+freezes in one chunk, licensed SFX validation and mixing, resumable rendering,
+final verification, real branch creation/collision behavior, portable setup,
+Streamlit startup, and a real 10-minute 18,000-frame acceptance render.

@@ -267,6 +267,15 @@ def entries_to_table(entries: Iterable[OverlayEntry]) -> pd.DataFrame:
                 "ANIMATION": item.animation,
                 "EFFECT": item.effect,
                 "SAFETY_SCORE": round(item.safety_score, 1),
+                "MOTION_SCORE": round(item.motion_score, 3),
+                "DETAIL_SCORE": round(item.detail_score, 3),
+                "SECTION_CUE": item.section_cue,
+                "ACTION_START_30FPS": frame_to_timecode(item.action_start_frame)
+                if item.action_start_frame is not None
+                else "",
+                "ACTION_END_30FPS": frame_to_timecode(item.action_end_frame)
+                if item.action_end_frame is not None
+                else "",
                 "CONFIDENCE": item.confidence,
                 "READING_CPS": item.reading_cps,
                 "READING_STATUS": item.reading_status,

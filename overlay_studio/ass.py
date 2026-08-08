@@ -35,13 +35,37 @@ def _escape_text(text: str) -> str:
 
 def _render_text(entry: OverlayEntry, settings: ProjectSettings) -> str:
     text = _escape_text(entry.wrapped_text or entry.text)
+    accent = _ass_color(settings.accent_color)
+    normal = _ass_color(settings.text_color)
+    small_size = max(18, round(entry.font_size_px * 0.48))
+    if entry.semantic_type == "EVIDENCE":
+        return f"{{\\fs{small_size}\\c{accent}}}EVIDENCE  {{\\fs{entry.font_size_px}\\c{normal}}}{text}"
+    if entry.semantic_type == "WARNING":
+        return f"{{\\fs{small_size}\\c{accent}}}CAUTION  {{\\fs{entry.font_size_px}\\c{normal}}}{text}"
+    if entry.semantic_type == "UNCERTAINTY":
+        separator = "\\N" if "\\N" not in text else "  "
+        return f"{{\\fs{small_size}\\c{accent}}}POSSIBLE / NOT PROVEN{separator}{{\\fs{entry.font_size_px}\\c{normal}}}{text}"
+    if entry.semantic_type == "SECTION":
+        return text.upper()
+    if entry.semantic_type == "NUMBER":
+        match = re.search(r"\d[\d,.]*%?", text)
+        if match:
+            large_size = round(entry.font_size_px * 1.22)
+            label_size = max(18, round(entry.font_size_px * 0.58))
+            return (
+                f"{{\\fs{label_size}\\c{normal}}}{text[:match.start()]}"
+                f"{{\\fs{large_size}\\c{accent}}}{match.group(0)}"
+                f"{{\\fs{label_size}\\c{normal}}}{text[match.end():]}"
+            )
+    if entry.semantic_type == "COMPARISON":
+        match = re.search(r"\b(?:VS\.?|VERSUS)\b", text, flags=re.IGNORECASE)
+        if match:
+            return text[:match.start()] + "{\\c" + accent + "}" + match.group(0).upper() + "{\\c" + normal + "}" + text[match.end():]
     if entry.effect != "ACCENT_WORD" or not entry.accent_word:
         return text
     match = re.search(re.escape(entry.accent_word), text, flags=re.IGNORECASE)
     if not match:
         return text
-    accent = _ass_color(settings.accent_color)
-    normal = _ass_color(settings.text_color)
     return (
         text[: match.start()]
         + "{\\c"
@@ -151,7 +175,12 @@ def _protected_plate_geometry(
     horizontal_padding = max(round(22 * scale), round(font_size * 0.25))
     vertical_padding = max(round(12 * scale), round(font_size * 0.15))
     width = max(_estimated_text_width(line, font_size) for line in lines)
-    height = round(font_size * (1.12 + max(0, len(lines) - 1) * 1.08))
+    rendered_line_count = len(lines)
+    if entry.semantic_type == "UNCERTAINTY" and len(lines) == 1:
+        rendered_line_count += 1
+        label_size = max(18, round(font_size * 0.48))
+        width = max(width, _estimated_text_width("POSSIBLE / NOT PROVEN", label_size))
+    height = round(font_size * (1.12 + max(0, rendered_line_count - 1) * 1.08))
     plate_width = width + horizontal_padding * 2
     plate_height = height + vertical_padding * 2
     radius = min(
