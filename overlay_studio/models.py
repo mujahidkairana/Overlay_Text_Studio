@@ -102,6 +102,8 @@ class ProjectSettings:
     keep_analysis_frames: bool = True
     style_preset: str = "YOUTUBE_PRO"
     parallel_analysis_workers: int = 4
+    scene_cut_frames: list[int] = field(default_factory=list)
+    density_preset: str = "STANDARD"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

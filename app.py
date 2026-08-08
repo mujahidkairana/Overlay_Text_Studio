@@ -33,6 +33,7 @@ from overlay_studio.render import (
     select_fast_encoder,
 )
 from overlay_studio.safety import analyze_entries
+from overlay_studio.scene_analysis import detect_scene_cuts
 from overlay_studio.srt import SRTValidationError, load_srt, reading_load_warnings
 from overlay_studio.timing import TimingValidationError, entries_to_table, load_entries
 
@@ -365,6 +366,13 @@ if st.button(
         prepare_text_layout(entries, settings)
 
         def automatic_plan(progress):
+            progress(0.01, "Detecting and caching hard scene cuts")
+            settings.scene_cut_frames = detect_scene_cuts(
+                video.path,
+                project_dir / "cache" / "scene_cuts.json",
+                app_root=APP_ROOT,
+                fps=settings.fps,
+            )
             frames = extract_analysis_frames(
                 video.path,
                 project_dir / "cache" / "analysis_frames",
