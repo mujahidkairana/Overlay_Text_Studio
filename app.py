@@ -7,6 +7,7 @@ import random
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -27,6 +28,9 @@ from overlay_studio.models import (
 )
 from overlay_studio.project import apply_edited_table, load_project_data, save_project
 from overlay_studio.progress import PLANNING_TASKS, ProgressEstimator, RENDER_TASKS
+from overlay_studio.render_lock import acquire as acquire_render_lock
+from overlay_studio.render_lock import release as release_render_lock
+from overlay_studio.render_lock import update as update_render_lock
 from overlay_studio.render import (
     RenderCancelled,
     ensure_free_space,
@@ -264,15 +268,26 @@ def _show_progress_details(target, details: dict[str, object]) -> None:
         )
         st.caption(str(details.get("label", "Working")))
         first, second, third = st.columns(3)
-        first.metric("Current task started", details.get("task_started_text", "—"))
+        first.metric("Stage started", details.get("task_started_text", "—"))
         second.metric(
-            "Current task elapsed",
+            "Stage elapsed",
             _format_duration(details.get("current_elapsed_seconds")),
         )
         third.metric(
-            "Current task remaining (estimate)",
+            "Stage remaining (estimate)",
             _format_duration(details.get("current_estimated_remaining_seconds")),
         )
+        if details.get("chunk_number"):
+            chunk_started = datetime.fromtimestamp(
+                float(details["chunk_started_at"])
+            ).strftime("%I:%M:%S %p")
+            live_chunk_elapsed = float(details.get("chunk_elapsed_seconds", 0.0))
+            if snapshot_at is not None and float(details.get("progress", 0.0)) < 1.0:
+                live_chunk_elapsed += max(0.0, time.time() - float(snapshot_at))
+            st.caption(
+                f"Current chunk {details['chunk_number']} of {details['chunk_count']} | "
+                f"started {chunk_started} | elapsed {_format_duration(live_chunk_elapsed)}"
+            )
         fourth, fifth, sixth = st.columns(3)
         fourth.metric(
             "Total elapsed", _format_duration(details.get("total_elapsed_seconds"))
@@ -580,9 +595,18 @@ if st.button(
         st.session_state.final_output_path = str(output_path)
         cancel_file = project_dir / "STOP_RENDER.REQUEST"
         status_file = project_dir / "render_status.json"
+        ensure_free_space(project_dir, video, settings)
+        lock_token, active_owner = acquire_render_lock(project_dir)
+        if lock_token is None:
+            st.session_state.render_status_path = str(status_file)
+            owner_pid = active_owner.get("pid") if active_owner else "unknown"
+            st.warning(
+                f"A render is already active for this project (worker PID {owner_pid}). "
+                "Showing its existing status instead."
+            )
+            st.stop()
         cancel_file.unlink(missing_ok=True)
         status_file.unlink(missing_ok=True)
-        ensure_free_space(project_dir, video, settings)
         log_path = project_dir / "background_render.log"
         command = [
             sys.executable,
@@ -596,6 +620,8 @@ if st.button(
             str(status_file),
             "--stop",
             str(cancel_file),
+            "--lock-token",
+            lock_token,
         ]
         launch_progress = ProgressEstimator(RENDER_TASKS).snapshot(
             0.0, "Launching background render"
@@ -616,16 +642,23 @@ if st.button(
             flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
                 subprocess, "CREATE_NO_WINDOW", 0
             )
-        with log_path.open("ab", buffering=0) as log:
-            process = subprocess.Popen(
-                command,
-                cwd=APP_ROOT,
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                creationflags=flags,
-                start_new_session=os.name != "nt",
+        try:
+            with log_path.open("ab", buffering=0) as log:
+                process = subprocess.Popen(
+                    command,
+                    cwd=APP_ROOT,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    creationflags=flags,
+                    start_new_session=os.name != "nt",
+                )
+            update_render_lock(
+                project_dir, lock_token, pid=process.pid, state="starting"
             )
+        except Exception:
+            release_render_lock(project_dir, lock_token)
+            raise
         st.session_state.render_status_path = str(status_file)
         st.success("Background render started. You can safely leave this page open.")
     except (TimingValidationError, SRTValidationError, MediaError, OSError, ValueError) as exc:
@@ -657,7 +690,7 @@ if st.session_state.video_info is not None:
                 )
             st.json(report, expanded=False)
 
-@st.fragment(run_every=2)
+@st.fragment(run_every=5)
 def _render_monitor() -> None:
     status_text = st.session_state.get("render_status_path", "")
     if not status_text:

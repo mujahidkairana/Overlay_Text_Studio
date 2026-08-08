@@ -10,12 +10,18 @@ if not exist runtime_path.txt (
     if errorlevel 1 exit /b 1
 )
 set /p "RUNTIME_ROOT=" < runtime_path.txt
-if not exist "%RUNTIME_ROOT%\Scripts\python.exe" (
-    echo Shared runtime is missing or moved. Starting repair...
-    call SETUP_ONCE.bat
-    if errorlevel 1 exit /b 1
-    set /p "RUNTIME_ROOT=" < runtime_path.txt
-)
+if not exist "%RUNTIME_ROOT%\Scripts\python.exe" goto repair_runtime
+"%RUNTIME_ROOT%\Scripts\python.exe" -c "import sys" >nul 2>&1
+if errorlevel 1 goto repair_runtime
+goto runtime_ready
+
+:repair_runtime
+echo Shared runtime is missing, moved, or unhealthy. Starting repair...
+call SETUP_ONCE.bat
+if errorlevel 1 exit /b 1
+set /p "RUNTIME_ROOT=" < runtime_path.txt
+
+:runtime_ready
 "%RUNTIME_ROOT%\Scripts\python.exe" start_overlay.py
 set "APP_EXIT=%ERRORLEVEL%"
 if not "%APP_EXIT%"=="0" (

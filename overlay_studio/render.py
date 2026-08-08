@@ -468,6 +468,7 @@ def _chunk_key(
         if entry.enabled and entry.start_frame < end and entry.end_frame > start
     ]
     payload = {
+        "overlay_renderer_version": 2,
         "video": file_fingerprint(video_path),
         "start": start,
         "end": end,
