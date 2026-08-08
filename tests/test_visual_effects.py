@@ -38,6 +38,8 @@ class VisualEffectFilterTests(unittest.TestCase):
             window_start_frame=300, window_end_frame=390,
         )
         self.assertIn("1+0.05", result)
+        self.assertIn("(t-0.500000)/0.250000", result)
+        self.assertIn("(2.500000-t)/0.250000", result)
         self.assertIn("crop=1920:1080", result)
         self.assertNotIn("zoompan", result)
 

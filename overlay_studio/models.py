@@ -22,6 +22,11 @@ PRIORITIES = ("LOW", "MEDIUM", "HIGH")
 VISUAL_ACTIONS = ("AUTO", "NONE", "PUNCH_IN", "DIM_FOCUS", "FREEZE")
 
 
+def source_matched_dimensions(width: int, height: int) -> tuple[int, int]:
+    """Return encoder-safe even dimensions without changing the source class."""
+    return max(2, width - width % 2), max(2, height - height % 2)
+
+
 @dataclass(slots=True)
 class VideoInfo:
     path: str

@@ -116,6 +116,33 @@ def reading_load_warnings(
     return warnings
 
 
+def validate_srt_video_timing(
+    captions: Iterable[CaptionInterval], video_duration_frames: int, *, fps: int = 30
+) -> list[str]:
+    """Reject clearly incompatible subtitles and flag suspiciously short coverage."""
+    ordered = sorted(captions, key=lambda item: (item.start_frame, item.end_frame))
+    if not ordered:
+        raise SRTValidationError("No usable subtitle intervals were found.")
+    overrun = ordered[-1].end_frame - video_duration_frames
+    if overrun > 2 * fps:
+        raise SRTValidationError(
+            "The selected SRT ends more than 2 seconds after the video. "
+            "Choose the subtitles that belong to this video."
+        )
+    warnings: list[str] = []
+    uncovered_end = video_duration_frames - ordered[-1].end_frame
+    suspicious_gap = max(60 * fps, round(video_duration_frames * 0.25))
+    if uncovered_end > suspicious_gap:
+        warnings.append(
+            "Subtitle timing ends much earlier than the video; confirm that this SRT belongs to it."
+        )
+    if ordered[0].start_frame > suspicious_gap:
+        warnings.append(
+            "Subtitles begin unusually late in the video; confirm that this SRT belongs to it."
+        )
+    return warnings
+
+
 def long_caption_gaps(
     captions: Iterable[CaptionInterval], *, minimum_seconds: float = 2.5, fps: int = 30
 ) -> list[tuple[int, int]]:

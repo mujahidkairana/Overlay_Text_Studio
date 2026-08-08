@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from typing import Callable
 
 from .media import MediaError, ffmpeg_path, file_fingerprint
 
@@ -34,6 +35,7 @@ def detect_scene_cuts(
     app_root: str | Path | None = None,
     fps: int = 30,
     threshold: float = 0.35,
+    warning_callback: Callable[[str], None] | None = None,
 ) -> list[int]:
     source = Path(video_path).resolve()
     cache = Path(cache_path)
@@ -60,7 +62,7 @@ def detect_scene_cuts(
         "-an",
         "-vf",
         f"scale=320:-2:flags=area,select=gt(scene\\,{threshold}),showinfo",
-        "-vsync",
+        "-fps_mode",
         "vfr",
         "-f",
         "null",
@@ -70,7 +72,14 @@ def detect_scene_cuts(
         command, capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     if completed.returncode != 0:
-        raise MediaError(completed.stderr.strip() or "Scene-cut analysis failed.")
+        detail = completed.stderr.strip() or "Scene-cut analysis failed."
+        if warning_callback is None:
+            raise MediaError(detail)
+        warning_callback(
+            "Scene-cut analysis was unavailable; scene-sensitive extra effects "
+            "were disabled and safe overlay rendering will continue. " + detail
+        )
+        return []
     cut_frames = sorted(
         {
             round(float(match.group(1)) * fps)

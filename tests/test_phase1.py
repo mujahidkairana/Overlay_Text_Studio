@@ -9,11 +9,13 @@ from overlay_studio.models import OverlayEntry, ProjectSettings, VideoInfo
 from overlay_studio.layout import plan_layout_and_styles
 from overlay_studio.project import load_project, load_project_data, save_project
 from overlay_studio.srt import (
+    CaptionInterval,
     SRTValidationError,
     active_captions,
     long_caption_gaps,
     parse_srt_text,
     reading_load_warnings,
+    validate_srt_video_timing,
 )
 from overlay_studio.timing import entries_to_table, load_entries
 
@@ -49,6 +51,13 @@ class SRTTests(unittest.TestCase):
         self.assertEqual(len(reading_load_warnings([entry], captions)), 1)
         self.assertEqual(long_caption_gaps(captions), [(30, 120)])
 
+    def test_srt_video_timing_rejects_overrun_and_warns_short_coverage(self):
+        captions = [CaptionInterval(0, 100, "Caption", 1, 5.0)]
+        with self.assertRaisesRegex(SRTValidationError, "more than 2 seconds"):
+            validate_srt_video_timing(captions, 30)
+        warnings = validate_srt_video_timing(captions, 6000)
+        self.assertTrue(any("much earlier" in warning for warning in warnings))
+
 
 class RichOverlayAndPersistenceTests(unittest.TestCase):
     def test_ai_template_loads_and_demonstrates_every_finite_option(self):
@@ -65,7 +74,9 @@ class RichOverlayAndPersistenceTests(unittest.TestCase):
             {entry.visual_action for entry in entries},
             {"AUTO", "NONE", "PUNCH_IN", "DIM_FOCUS", "FREEZE"},
         )
-        self.assertEqual({entry.lock_style for entry in entries}, {False, True})
+        self.assertEqual({entry.lock_style for entry in entries}, {False})
+        self.assertIn("SUBTLE_WHOOSH", {entry.sfx for entry in entries})
+        self.assertNotIn("WHOOSH", {entry.sfx for entry in entries})
 
     def test_legacy_four_column_overlay_still_loads(self):
         with tempfile.TemporaryDirectory() as temporary:

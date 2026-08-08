@@ -17,7 +17,8 @@ table.
 - `EMPHASIS_WORD`: optional exact word/short token occurring in the text.
 - `VISUAL_ACTION`: `AUTO`, `NONE`, `PUNCH_IN`, `DIM_FOCUS`, or `FREEZE`.
 - `SFX`: `NONE`, or the uppercase asset name for a licensed WAV file. For
-  example, `SOFT_HIT` resolves to `soft_hit.wav` and `WHOOSH` to `whoosh.wav`.
+  example, `SOFT_HIT` resolves to `soft_hit.wav` and `SUBTLE_WHOOSH` to
+  `subtle_whoosh.wav`.
 - `LOCK_STYLE`: `TRUE` only when the requested style must not be automatically
   changed; otherwise `FALSE`.
 

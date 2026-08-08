@@ -2,10 +2,10 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
-title Overlay Text Studio v2 - Shared Setup
+title Overlay Text Studio v3 - Shared Setup
 if not exist logs mkdir logs
 echo ============================================================
-echo Overlay Text Studio v2 - Install or Repair
+echo Overlay Text Studio v3 - Install or Repair
 echo ============================================================
 echo Installed components are reused first.
 echo Cached downloads are used second.

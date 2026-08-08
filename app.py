@@ -23,6 +23,7 @@ from overlay_studio.models import (
     SEMANTIC_TYPES,
     VISUAL_ACTIONS,
     ProjectSettings,
+    source_matched_dimensions,
 )
 from overlay_studio.project import apply_edited_table, load_project_data, save_project
 from overlay_studio.render import (
@@ -36,7 +37,12 @@ from overlay_studio.render import (
 )
 from overlay_studio.safety import analyze_entries
 from overlay_studio.scene_analysis import detect_scene_cuts
-from overlay_studio.srt import SRTValidationError, load_srt, reading_load_warnings
+from overlay_studio.srt import (
+    SRTValidationError,
+    load_srt,
+    reading_load_warnings,
+    validate_srt_video_timing,
+)
 from overlay_studio.timing import TimingValidationError, entries_to_table, load_entries
 
 
@@ -166,10 +172,8 @@ def _settings_from_ui(
         width, height = 1920, 1080
     elif resolution.startswith("4K"):
         width, height = 3840, 2160
-    elif source_height >= 1800 or source_width >= 3200:
-        width, height = 3840, 2160
     else:
-        width, height = 1920, 1080
+        width, height = source_matched_dimensions(source_width, source_height)
     return ProjectSettings(
         project_name=st.session_state.get("project_name") or video_stem,
         output_width=width,
@@ -242,9 +246,12 @@ def _open_project(path_text: str) -> None:
     st.session_state.settings = settings
     st.session_state.edited_table = entries_to_table(entries)
     st.session_state.random_seed = settings.random_seed
-    st.session_state.resolution = (
-        "1080p — 1920×1080" if settings.output_height == 1080 else "4K — 3840×2160"
-    )
+    if (settings.output_width, settings.output_height) == (1920, 1080):
+        st.session_state.resolution = "1080p — 1920×1080"
+    elif (settings.output_width, settings.output_height) == (3840, 2160):
+        st.session_state.resolution = "4K — 3840×2160"
+    else:
+        st.session_state.resolution = "Auto — match source"
     st.session_state.analysis_fps = settings.analysis_fps
     st.session_state.font_name = settings.font_name
     st.session_state.accent_color = settings.accent_color
@@ -329,12 +336,20 @@ with st.sidebar:
 st.subheader("Add your content")
 st.markdown('<p class="step-note">Choose three files once. The app validates subtitle reading load, plans safe overlays, renders, and verifies automatically.</p>', unsafe_allow_html=True)
 template_path = APP_ROOT / "templates" / "overlay_template.csv"
-st.download_button(
-    "Download complete AI-ready timing template",
-    data=template_path.read_bytes(),
-    file_name="overlay_template.csv",
-    mime="text/csv",
-)
+guide_path = APP_ROOT / "templates" / "AI_TEMPLATE_GUIDE.md"
+with st.container(horizontal=True):
+    st.download_button(
+        "Download complete AI-ready timing template",
+        data=template_path.read_bytes(),
+        file_name="overlay_template.csv",
+        mime="text/csv",
+    )
+    st.download_button(
+        "Download AI generation guide",
+        data=guide_path.read_bytes(),
+        file_name="AI_TEMPLATE_GUIDE.md",
+        mime="text/markdown",
+    )
 _path_row("Source video", "video_path", [("Video", "*.mp4 *.mov *.mkv *.m4v"), ("All files", "*.*")])
 _path_row("Subtitle SRT", "srt_path", [("Subtitles", "*.srt"), ("All files", "*.*")])
 _path_row("Overlay timing CSV/XLSX", "timing_path", [("Timing sheet", "*.csv *.xlsx *.xlsm"), ("All files", "*.*")])
@@ -366,6 +381,7 @@ if st.button(
             st.session_state.timing_path,
             video_duration_frames=video.duration_frames_30,
         )
+        warnings.extend(validate_srt_video_timing(captions, video.duration_frames_30))
         warnings.extend(reading_load_warnings(entries, captions))
         settings = _settings_from_ui(
             Path(video.path).stem,
@@ -384,6 +400,28 @@ if st.button(
                 f"Automatic encoder: {settings.encoder} "
                 f"(benchmarked {len(encoder_timings)} available option(s))"
             )
+        sfx_warnings = validate_sfx_assets(entries, settings, project_dir, APP_ROOT)
+        warnings.extend(sfx_warnings)
+        ensure_free_space(project_dir, video, settings)
+        with st.container(border=True):
+            st.subheader("Automatic pre-flight")
+            st.markdown(
+                f":green-badge[Video ready] **{video.duration_seconds / 60:.1f} min** · "
+                f"{video.width}×{video.height}"
+            )
+            st.markdown(
+                f":green-badge[SRT compatible] **{len(captions)} captions** · "
+                f":green-badge[Overlay sheet ready] **{len(entries)} overlays**"
+            )
+            st.markdown(
+                f":green-badge[Output] **{settings.output_width}×{settings.output_height}** · "
+                f":green-badge[Encoder] **{settings.encoder}** · "
+                ":green-badge[Free space] **sufficient**"
+            )
+            if sfx_warnings:
+                st.caption(
+                    f"{len(sfx_warnings)} optional SFX issue(s) found; they will be skipped safely."
+                )
         prepare_text_layout(entries, settings)
 
         def automatic_plan(progress):
@@ -393,6 +431,7 @@ if st.button(
                 project_dir / "cache" / "scene_cuts.json",
                 app_root=APP_ROOT,
                 fps=settings.fps,
+                warning_callback=warnings.append,
             )
             frames = extract_analysis_frames(
                 video.path,
@@ -411,7 +450,6 @@ if st.button(
             )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
             plan_editorial_actions(entries, settings, captions=captions)
-            warnings.extend(validate_sfx_assets(entries, settings, project_dir, APP_ROOT))
             st.session_state.editorial_report = editorial_report(
                 entries, video.duration_seconds
             )

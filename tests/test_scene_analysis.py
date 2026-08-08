@@ -4,6 +4,7 @@ import unittest
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from overlay_studio.media import ffmpeg_path
 from overlay_studio.scene_analysis import cuts_inside, detect_scene_cuts, select_cut_frames
@@ -40,6 +41,25 @@ class SceneAnalysisTests(unittest.TestCase):
             cuts = detect_scene_cuts(source, cache, app_root=ROOT)
             self.assertTrue(any(28 <= frame <= 32 for frame in cuts), cuts)
             self.assertEqual(detect_scene_cuts(source, cache, app_root=ROOT), cuts)
+
+    def test_modern_ffmpeg_syntax_and_fail_soft_callback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.mp4"
+            source.write_bytes(b"video")
+            warnings: list[str] = []
+            with patch("overlay_studio.scene_analysis.subprocess.run") as run:
+                run.return_value.returncode = 1
+                run.return_value.stderr = "simulated unsupported analysis"
+                cuts = detect_scene_cuts(
+                    source, root / "cache.json", app_root=ROOT,
+                    warning_callback=warnings.append,
+                )
+            command = run.call_args.args[0]
+            self.assertIn("-fps_mode", command)
+            self.assertNotIn("-vsync", command)
+            self.assertEqual(cuts, [])
+            self.assertIn("will continue", warnings[0])
 
 
 if __name__ == "__main__":

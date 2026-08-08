@@ -180,6 +180,13 @@ def _protected_plate_geometry(
         rendered_line_count += 1
         label_size = max(18, round(font_size * 0.48))
         width = max(width, _estimated_text_width("POSSIBLE / NOT PROVEN", label_size))
+    if entry.semantic_type == "WARNING" and len(lines) == 1:
+        label_size = max(18, round(font_size * 0.48))
+        width = max(
+            width,
+            _estimated_text_width("CAUTION", label_size)
+            + _estimated_text_width("  " + lines[0], font_size),
+        )
     height = round(font_size * (1.12 + max(0, rendered_line_count - 1) * 1.08))
     plate_width = width + horizontal_padding * 2
     plate_height = height + vertical_padding * 2
