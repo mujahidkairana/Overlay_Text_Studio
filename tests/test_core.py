@@ -12,7 +12,12 @@ from overlay_studio.layout import plan_layout_and_styles
 from overlay_studio.media import extract_analysis_frames, ffmpeg_path, ffprobe_path, probe_video
 from overlay_studio.models import OverlayEntry, ProjectSettings, VideoInfo
 from overlay_studio.project import load_project, save_project
-from overlay_studio.render import RenderCancelled, plan_chunks, render_full_resumable
+from overlay_studio.render import (
+    RenderCancelled,
+    plan_chunks,
+    render_full_resumable,
+    select_fast_encoder,
+)
 from overlay_studio.safety import _face_boxes, analyze_entries, candidate_boxes, text_box_width_fraction
 from overlay_studio.timing import (
     TimingValidationError,
@@ -21,6 +26,7 @@ from overlay_studio.timing import (
     timecode_to_frame,
 )
 import start_overlay
+from overlay_studio.worker import run as run_worker
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +112,31 @@ class PlanningTests(unittest.TestCase):
         uhd = build_ass([entry], ProjectSettings(output_width=3840, output_height=2160))
         self.assertIn("\\bord3", hd)
         self.assertIn("\\bord6", uhd)
+
+    def test_fast_reading_uses_protected_plate(self):
+        entry = OverlayEntry(
+            "FAST", 0, 30,
+            "THIS OVERLAY CONTAINS FAR TOO MANY CHARACTERS TO READ IN ONE SECOND",
+        )
+        settings = ProjectSettings(output_width=1920, output_height=1080)
+        plan_layout_and_styles([entry], settings)
+        self.assertEqual(entry.reading_status, "TOO_FAST")
+        self.assertEqual(entry.effect, "PROTECTED_PLATE")
+        self.assertIn("OverlayPlate", build_ass([entry], settings))
+
+    def test_overlapping_entries_choose_different_positions(self):
+        with tempfile.TemporaryDirectory() as temp_string:
+            frame = Path(temp_string) / "frame.jpg"
+            Image.new("RGB", (640, 360), (30, 30, 30)).save(frame)
+            entries = [
+                OverlayEntry("A", 0, 60, "FIRST"),
+                OverlayEntry("B", 15, 75, "SECOND"),
+            ]
+            analyze_entries(entries, [frame], sample_fps=0.5, max_workers=1)
+            self.assertNotEqual(
+                entries[0].resolved_position,
+                entries[1].resolved_position,
+            )
 
     def test_safe_region_expands_for_longer_rendered_text(self):
         short = OverlayEntry("S", 0, 60, "SHORT")
@@ -287,6 +318,43 @@ class SetupFlowTests(unittest.TestCase):
     def test_versioned_shared_ffmpeg_layout_is_supported(self):
         media = (ROOT / "overlay_studio" / "media.py").read_text(encoding="utf-8")
         self.assertIn('glob(f"*/bin/{executable}")', media)
+
+    def test_cached_encoder_selection_needs_no_benchmark(self):
+        with tempfile.TemporaryDirectory() as temp_string:
+            cache = Path(temp_string) / "encoder.json"
+            cache.write_text(
+                '{"selected":"libx264","seconds":{"libx264":1.25}}',
+                encoding="utf-8",
+            )
+            selected, timings = select_fast_encoder(ROOT, cache)
+            self.assertEqual(selected, "libx264")
+            self.assertEqual(timings["libx264"], 1.25)
+
+    def test_background_worker_reports_safe_stop(self):
+        with tempfile.TemporaryDirectory() as temp_string:
+            temp = Path(temp_string)
+            source = temp / "source.mp4"
+            source.write_bytes(b"placeholder")
+            video = VideoInfo(str(source), 320, 180, 2.0, 30.0, False, "h264")
+            settings = ProjectSettings(
+                project_name="worker", output_width=320, output_height=180
+            )
+            saved = save_project(
+                temp / "project",
+                video=video,
+                timing_path=str(temp / "timing.csv"),
+                entries=[],
+                settings=settings,
+            )
+            stop = temp / "project" / "STOP_RENDER.REQUEST"
+            stop.write_text("stop", encoding="utf-8")
+            status = temp / "project" / "render_status.json"
+            result = run_worker(
+                saved["project"], temp / "output.mp4", status, stop
+            )
+            payload = __import__("json").loads(status.read_text(encoding="utf-8"))
+            self.assertEqual(result, 2)
+            self.assertEqual(payload["state"], "stopped")
 
     def test_shared_setup_has_installed_cached_download_precedence(self):
         script = (ROOT / "shared_setup.ps1").read_text(encoding="utf-8")

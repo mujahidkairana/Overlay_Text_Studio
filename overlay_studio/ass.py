@@ -76,6 +76,12 @@ def _effect_tags(entry: OverlayEntry, settings: ProjectSettings) -> str:
             f"\\bord{strong_border}\\shad{shadow}\\blur0.18"
             r"\3c&H000000&\4c&H000000&\4a&H58&"
         )
+    if entry.effect == "PROTECTED_PLATE":
+        padding = max(7, round(10.0 * scale))
+        return (
+            f"\\bord{padding}\\shad0\\blur0.08"
+            r"\3c&H101010&\3a&H58&"
+        )
     return (
         f"\\bord{clean_border}\\shad{shadow}\\blur0.12"
         r"\3c&H080808&\4c&H000000&\4a&H68&"
@@ -139,6 +145,7 @@ YCbCr Matrix: TV.709
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Overlay,{font_name},100,{normal_color},{normal_color},&H00000000,&H50000000,-1,0,0,0,100,100,0,0,1,4,4,7,0,0,0,1
+Style: OverlayPlate,{font_name},100,{normal_color},{normal_color},&H58101010,&H70000000,-1,0,0,0,100,100,0,0,3,10,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -165,12 +172,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             + f"\\c{normal_color}"
         )
         text = _render_text(entry, settings)
+        style_name = "OverlayPlate" if entry.effect == "PROTECTED_PLATE" else "Overlay"
         event_lines.append(
             "Dialogue: 1,"
             + _ass_time_from_frame(start, settings.fps)
             + ","
             + _ass_time_from_frame(end, settings.fps)
-            + ",Overlay,,0,0,0,,{"
+            + f",{style_name},,0,0,0,,{{"
             + tags
             + "}"
             + text

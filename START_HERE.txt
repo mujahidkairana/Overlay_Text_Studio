@@ -14,6 +14,7 @@ EVERYDAY USE
 2. Click "Create final YouTube video automatically".
 3. The app analyzes, styles, renders, and verifies the result without stopping
    for intermediate questions.
+4. Rendering continues in the background. Stop/Resume preserves valid chunks.
 
 CONTINUE LATER
 Open the saved project.json from "Continue an existing project".

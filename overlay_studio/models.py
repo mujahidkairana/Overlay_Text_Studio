@@ -13,7 +13,7 @@ ANIMATIONS = (
     "FOCUS_IN",
     "FADE_ONLY",
 )
-EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "STRONG_OUTLINE")
+EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "PROTECTED_PLATE", "STRONG_OUTLINE")
 
 
 @dataclass(slots=True)
@@ -49,6 +49,8 @@ class OverlayEntry:
     note: str = ""
     lock_style: bool = False
     accent_word: str = ""
+    reading_cps: float = 0.0
+    reading_status: str = "NOT_CHECKED"
 
     @property
     def duration_frames(self) -> int:
@@ -83,7 +85,7 @@ class ProjectSettings:
     safe_side_percent: float = 4.5
     caption_safe_percent: float = 35.0
     chunk_target_seconds: int = 60
-    encoder: str = "libx264"
+    encoder: str = "auto"
     x264_preset: str = "veryfast"
     crf: int = 18
     end_time_is_exclusive: bool = True

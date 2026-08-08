@@ -1,2 +1,2 @@
-Overlay Text Studio v2.2.0
-Professional YouTube overlays and faster automatic workflow
+Overlay Text Studio v2.3.0
+Background rendering, automatic encoder benchmark, and viewer QA

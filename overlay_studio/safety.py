@@ -259,15 +259,25 @@ def analyze_entries(
                     )
 
     recent: list[str] = []
+    active: list[OverlayEntry] = []
     total = max(1, len(planned))
     for index, entry in enumerate(planned):
         if not entry.enabled:
             continue
+        active = [other for other in active if other.end_frame > entry.start_frame]
         scores = scored[id(entry)]
         if entry.position in POSITIONS:
             chosen = next(score for score in scores if score.position == entry.position)
         else:
             chosen = scores[0]
+            used_positions = {other.resolved_position for other in active}
+            if chosen.position in used_positions:
+                alternative = next(
+                    (score for score in scores if score.position not in used_positions),
+                    None,
+                )
+                if alternative is not None:
+                    chosen = alternative
             # Avoid visual monotony only when the alternative is almost equally safe.
             if len(recent) >= 3 and len(set(recent[-3:])) == 1 and chosen.position == recent[-1]:
                 close_alternative = next(
@@ -287,6 +297,7 @@ def analyze_entries(
             entry.confidence = "REVIEW"
             entry.note = "Busy top area; stronger text protection applied"
         recent.append(chosen.position)
+        active.append(entry)
         if progress:
             progress(0.85 + (index + 1) / total * 0.15, f"Placing {entry.scene_id}")
     return planned

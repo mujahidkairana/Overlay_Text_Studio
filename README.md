@@ -1,4 +1,4 @@
-# Overlay Text Studio v2.2
+# Overlay Text Studio v2.3
 
 ## Development branches
 
@@ -95,6 +95,11 @@ Use **Continue an existing project** and select its `project.json` to resume lat
   animation repetition.
 - Borders, shadows, spacing, and movement scale with output resolution.
 - Analysis uses a cached half-rate frame pass and up to four parallel workers.
+- Rendering runs in a separate background process, keeping Stop and status
+  controls responsive.
+- The fastest reliable CPU/Intel/NVIDIA/AMD encoder is benchmarked once and cached.
+- Simultaneous overlays are automatically separated across available positions.
+- Reading speed is measured; overly dense text receives a protected contrast plate.
 - Text normally uses one or two balanced lines. Very long lines can shrink to about 69 px at 4K and are flagged to shorten.
 - Entrance motion is short, rest time is dominant, and exit is a restrained fade.
 

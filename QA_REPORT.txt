@@ -1,7 +1,7 @@
-OVERLAY TEXT STUDIO v2.2.0 — QA SUMMARY
+OVERLAY TEXT STUDIO v2.3.0 — QA SUMMARY
 
 AUTOMATED REGRESSION SUITE
-- 20 tests passed.
+- 24 tests passed.
 - Python source compilation passed.
 - Streamlit clean-start smoke test passed with zero UI exceptions.
 - Blank-input validation shows a friendly source-video message.

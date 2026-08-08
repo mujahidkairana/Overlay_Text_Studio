@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import random
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -19,6 +22,7 @@ from overlay_studio.render import (
     estimate_required_bytes,
     render_clip,
     render_full_resumable,
+    select_fast_encoder,
 )
 from overlay_studio.safety import analyze_entries
 from overlay_studio.timing import TimingValidationError, entries_to_table, load_entries
@@ -67,6 +71,7 @@ def _initial_state() -> None:
         "encoder": "libx264",
         "x264_preset": "veryfast",
         "crf": 18,
+        "render_status_path": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -156,7 +161,7 @@ def _settings_from_ui(
         accent_color=st.session_state.get("accent_color", "#FFD84D"),
         safe_top_percent=float(st.session_state.get("safe_top_percent", 5.5)),
         chunk_target_seconds=int(st.session_state.get("chunk_seconds", 60)),
-        encoder=st.session_state.get("encoder", "libx264"),
+        encoder=st.session_state.get("encoder", "auto"),
         x264_preset=st.session_state.get("x264_preset", "veryfast"),
         crf=int(st.session_state.get("crf", 18)),
         style_preset="YOUTUBE_PRO",
@@ -269,7 +274,19 @@ with st.sidebar:
         st.text_input("Font family", key="font_name")
         st.slider("Top safe margin", min_value=4.0, max_value=10.0, step=0.5, key="safe_top_percent", help="Keeps text away from YouTube/player edges.")
         st.number_input("Random style seed", min_value=1, step=1, key="random_seed")
-        st.selectbox("Encoder", ["libx264", "h264_qsv"], index=None, key="encoder", format_func=lambda x: "CPU — reliable" if x == "libx264" else "Intel Quick Sync — faster if supported")
+        st.selectbox(
+            "Encoder",
+            ["auto", "libx264", "h264_qsv", "h264_nvenc", "h264_amf"],
+            index=None,
+            key="encoder",
+            format_func=lambda x: {
+                "auto": "Auto benchmark — recommended",
+                "libx264": "CPU — reliable",
+                "h264_qsv": "Intel Quick Sync",
+                "h264_nvenc": "NVIDIA NVENC",
+                "h264_amf": "AMD AMF",
+            }[x],
+        )
         st.selectbox("CPU speed", ["veryfast", "faster", "fast", "medium"], index=None, key="x264_preset")
         st.slider("Quality (lower is better)", min_value=16, max_value=24, key="crf")
         st.slider("Resume chunk length", min_value=30, max_value=120, step=15, key="chunk_seconds")
@@ -288,7 +305,15 @@ _path_row("Overlay timing CSV/XLSX", "timing_path", [("Timing sheet", "*.csv *.x
 with st.expander("Optional output location"):
     _path_row("Project and output folder", "output_root", None)
 
-if st.button("Create final YouTube video automatically", type="primary", width="stretch"):
+files_ready = bool(
+    st.session_state.video_path.strip() and st.session_state.timing_path.strip()
+)
+if st.button(
+    "Create final YouTube video automatically",
+    type="primary",
+    width="stretch",
+    disabled=not files_ready,
+):
     try:
         if not st.session_state.video_path.strip():
             raise MediaError("Choose a source video first.")
@@ -306,6 +331,16 @@ if st.button("Create final YouTube video automatically", type="primary", width="
         )
         settings.project_name = Path(video.path).stem
         project_dir = settings.project_dir(st.session_state.output_root)
+        if settings.encoder == "auto":
+            settings.encoder, encoder_timings = select_fast_encoder(
+                APP_ROOT,
+                project_dir / "cache" / "encoder_benchmark.json",
+                crf=settings.crf,
+            )
+            st.caption(
+                f"Automatic encoder: {settings.encoder} "
+                f"(benchmarked {len(encoder_timings)} available option(s))"
+            )
         prepare_text_layout(entries, settings)
 
         def automatic_plan(progress):
@@ -334,7 +369,7 @@ if st.button("Create final YouTube video automatically", type="primary", width="
         st.session_state.warnings = warnings
         st.session_state.edited_table = entries_to_table(entries)
         st.session_state.preview_path = ""
-        save_project(
+        saved = save_project(
             project_dir,
             video=video,
             timing_path=st.session_state.timing_path,
@@ -346,28 +381,53 @@ if st.button("Create final YouTube video automatically", type="primary", width="
         )
         st.session_state.final_output_path = str(output_path)
         cancel_file = project_dir / "STOP_RENDER.REQUEST"
+        status_file = project_dir / "render_status.json"
         cancel_file.unlink(missing_ok=True)
+        status_file.unlink(missing_ok=True)
         ensure_free_space(project_dir, video, settings)
-
-        def automatic_render(progress):
-            return render_full_resumable(
-                video,
-                entries,
-                settings,
-                output_path=output_path,
-                project_dir=project_dir,
-                app_root=APP_ROOT,
-                progress=progress,
-                cancel_check=cancel_file.exists,
-            )
-
-        final_path = _run_progress(automatic_render)
-        st.success(
-            f"Professional YouTube overlay video verified and ready: {final_path}"
+        log_path = project_dir / "background_render.log"
+        command = [
+            sys.executable,
+            "-m",
+            "overlay_studio.worker",
+            "--project",
+            str(saved["project"]),
+            "--output",
+            str(output_path),
+            "--status",
+            str(status_file),
+            "--stop",
+            str(cancel_file),
+        ]
+        status_file.write_text(
+            json.dumps(
+                {
+                    "state": "running",
+                    "progress": 0.0,
+                    "label": "Launching background render",
+                    "output": str(output_path),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
         )
-        st.video(str(final_path))
-    except RenderCancelled as exc:
-        st.warning(str(exc))
+        flags = 0
+        if os.name == "nt":
+            flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
+                subprocess, "CREATE_NO_WINDOW", 0
+            )
+        with log_path.open("ab", buffering=0) as log:
+            process = subprocess.Popen(
+                command,
+                cwd=APP_ROOT,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                creationflags=flags,
+                start_new_session=os.name != "nt",
+            )
+        st.session_state.render_status_path = str(status_file)
+        st.success("Background render started. You can safely leave this page open.")
     except (TimingValidationError, MediaError, OSError, ValueError) as exc:
         st.error(str(exc))
 
@@ -383,7 +443,45 @@ if st.session_state.video_info is not None:
     for warning in st.session_state.warnings:
         st.warning(warning)
 
-if st.session_state.edited_table is not None:
+@st.fragment(run_every=2)
+def _render_monitor() -> None:
+    status_text = st.session_state.get("render_status_path", "")
+    if not status_text:
+        return
+    status_path = Path(status_text)
+    if not status_path.exists():
+        return
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    state = status.get("state", "running")
+    progress = float(status.get("progress", 0.0))
+    label = str(status.get("label", "Rendering"))
+    if state == "running":
+        st.progress(max(0.0, min(1.0, progress)), text=label)
+        if st.button("Stop background render safely", width="stretch"):
+            status_path.parent.joinpath("STOP_RENDER.REQUEST").write_text(
+                "stop", encoding="utf-8"
+            )
+            st.warning("Stop requested. Completed chunks will remain reusable.")
+    elif state == "complete":
+        output = Path(str(status.get("output", "")))
+        st.success(f"Final video verified and ready: {output}")
+        if output.exists():
+            st.video(str(output))
+    elif state == "stopped":
+        st.warning(label)
+    else:
+        st.error(label)
+
+
+_render_monitor()
+
+
+if st.session_state.edited_table is not None and st.checkbox(
+    "Show optional expert adjustments", value=False
+):
     entries = st.session_state.entries
     table = st.session_state.edited_table
     high = sum(entry.confidence == "HIGH" for entry in entries)
