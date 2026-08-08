@@ -10,7 +10,7 @@ IMPLEMENTED PHASES
 - Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
 AUTOMATED AND RENDER VALIDATION
-- Full 68-test unittest suite passes on the bundled Windows runtime.
+- Full 69-test unittest suite passes on the bundled Windows runtime.
 - Headless Streamlit startup completes with zero UI exceptions.
 - Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
 - Scene analysis uses `-fps_mode vfr`; a simulated analysis failure continues safely with a warning.

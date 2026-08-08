@@ -359,6 +359,13 @@ class SetupFlowTests(unittest.TestCase):
         self.assertIn("Overlay Text Studio v3", setup_launcher)
         self.assertIn("Overlay Text Studio v3", app_launcher)
 
+    def test_windows_ci_avoids_duplicate_feature_branch_runs(self):
+        workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("push:\n    branches:\n      - main", workflow)
+
     def test_branch_helper_uses_repository_wide_daily_sequence(self):
         helper = (ROOT / "scripts" / "new_branch.ps1").read_text(encoding="utf-8")
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
