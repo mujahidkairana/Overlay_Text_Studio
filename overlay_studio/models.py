@@ -59,6 +59,8 @@ class OverlayEntry:
     priority: str = "MEDIUM"
     visual_action: str = "AUTO"
     sfx: str = "NONE"
+    action_start_frame: int = 0
+    action_end_frame: int = 0
     reading_cps: float = 0.0
     reading_status: str = "NOT_CHECKED"
 

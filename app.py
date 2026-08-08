@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from overlay_studio.editorial import plan_editorial_actions, write_editorial_report
 from overlay_studio.layout import balanced_wrap, calculate_font_size, plan_layout_and_styles, prepare_text_layout
 from overlay_studio.media import MediaError, extract_analysis_frames, probe_video
 from overlay_studio.models import (
@@ -83,6 +84,7 @@ def _initial_state() -> None:
         "x264_preset": "veryfast",
         "crf": 18,
         "render_status_path": "",
+        "density_preset": "STANDARD",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -180,6 +182,7 @@ def _settings_from_ui(
         crf=int(st.session_state.get("crf", 18)),
         style_preset="YOUTUBE_PRO",
         parallel_analysis_workers=min(4, max(1, (os.cpu_count() or 2) // 2)),
+        density_preset=st.session_state.get("density_preset", "STANDARD"),
     )
 
 
@@ -246,6 +249,7 @@ def _open_project(path_text: str) -> None:
     st.session_state.encoder = settings.encoder
     st.session_state.x264_preset = settings.x264_preset
     st.session_state.crf = settings.crf
+    st.session_state.density_preset = settings.density_preset
 
 
 _initial_state()
@@ -305,6 +309,13 @@ with st.sidebar:
         st.selectbox("CPU speed", ["veryfast", "faster", "fast", "medium"], index=None, key="x264_preset")
         st.slider("Quality (lower is better)", min_value=16, max_value=24, key="crf")
         st.slider("Resume chunk length", min_value=30, max_value=120, step=15, key="chunk_seconds")
+        st.selectbox(
+            "Editorial density",
+            ["CALM", "STANDARD", "ENERGETIC"],
+            index=None,
+            key="density_preset",
+            format_func=lambda value: value.title(),
+        )
 
 st.subheader("Add your content")
 st.markdown('<p class="step-note">Choose three files once. The app validates subtitle reading load, plans safe overlays, renders, and verifies automatically.</p>', unsafe_allow_html=True)
@@ -389,6 +400,10 @@ if st.button(
                 max_workers=settings.parallel_analysis_workers,
             )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
+            plan_editorial_actions(entries, settings, captions=captions)
+            write_editorial_report(
+                project_dir / "editorial_plan.json", entries, video.duration_seconds
+            )
             return frames
 
         _run_progress(automatic_plan)
