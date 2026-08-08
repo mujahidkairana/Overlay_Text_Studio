@@ -30,16 +30,72 @@ def _filter_path(path: str | Path) -> str:
     return text
 
 
-def _video_filter(ass_path: Path, settings: ProjectSettings) -> str:
+def _relative_action_intervals(
+    entries: Iterable[OverlayEntry],
+    action: str,
+    *,
+    window_start_frame: int,
+    window_end_frame: int,
+    fps: int,
+) -> list[tuple[float, float]]:
+    intervals: list[tuple[float, float]] = []
+    for entry in entries:
+        if not entry.enabled or entry.visual_action != action:
+            continue
+        action_start = entry.action_start_frame or entry.start_frame
+        action_end = entry.action_end_frame if entry.action_end_frame > action_start else entry.end_frame
+        start = max(window_start_frame, action_start)
+        end = min(window_end_frame, action_end)
+        if end > start:
+            intervals.append(((start - window_start_frame) / fps, (end - window_start_frame) / fps))
+    return intervals
+
+
+def _between_expression(intervals: list[tuple[float, float]]) -> str:
+    if not intervals:
+        return "0"
+    return "+".join(f"between(t\\,{start:.6f}\\,{end:.6f})" for start, end in intervals)
+
+
+def _video_filter(
+    ass_path: Path,
+    settings: ProjectSettings,
+    entries: Iterable[OverlayEntry] = (),
+    *,
+    window_start_frame: int = 0,
+    window_end_frame: int | None = None,
+) -> str:
+    end_frame = window_end_frame if window_end_frame is not None else 2**31 - 1
     scale = (
         f"fps={settings.fps},"
         f"scale={settings.output_width}:{settings.output_height}:force_original_aspect_ratio=decrease:flags=lanczos,"
         f"pad={settings.output_width}:{settings.output_height}:(ow-iw)/2:(oh-ih)/2:color=black"
     )
+    punch_intervals = _relative_action_intervals(
+        entries, "PUNCH_IN", window_start_frame=window_start_frame,
+        window_end_frame=end_frame, fps=settings.fps,
+    )
+    dim_intervals = _relative_action_intervals(
+        entries, "DIM_FOCUS", window_start_frame=window_start_frame,
+        window_end_frame=end_frame, fps=settings.fps,
+    )
+    effects: list[str] = []
+    if punch_intervals:
+        active = _between_expression(punch_intervals)
+        zoom = f"1+0.05*min(1\\,{active})"
+        effects.extend(
+            [
+                f"scale=w='iw*({zoom})':h='ih*({zoom})':eval=frame",
+                f"crop={settings.output_width}:{settings.output_height}:(iw-ow)/2:(ih-oh)/2",
+            ]
+        )
+    if dim_intervals:
+        active = _between_expression(dim_intervals)
+        effects.append(f"eq=brightness='-0.06*min(1\\,{active})':eval=frame")
     ass_filter = f"ass=filename='{_filter_path(ass_path)}'"
     if settings.font_file:
         ass_filter += f":fontsdir='{_filter_path(Path(settings.font_file).resolve().parent)}'"
-    return scale + "," + ass_filter
+    return ",".join([scale, *effects, ass_filter])
 
 
 def _encoder_args(settings: ProjectSettings) -> list[str]:
@@ -241,7 +297,16 @@ def render_clip(
     ]
     if include_audio:
         command += ["-map", "0:a:0?"]
-    command += ["-vf", _video_filter(ass_path, settings)]
+    command += [
+        "-vf",
+        _video_filter(
+            ass_path,
+            settings,
+            entries,
+            window_start_frame=start_frame,
+            window_end_frame=end_frame,
+        ),
+    ]
     command += _encoder_args(settings)
     command += [
         "-pix_fmt",
