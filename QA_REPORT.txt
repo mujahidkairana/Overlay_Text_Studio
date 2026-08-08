@@ -10,7 +10,7 @@ IMPLEMENTED PHASES
 - Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
 AUTOMATED AND RENDER VALIDATION
-- Full 76-test unittest suite passes on the bundled Windows runtime.
+- Full 79-test unittest suite passes on the bundled Windows runtime.
 - Headless Streamlit startup completes with zero UI exceptions.
 - Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
 - Scene analysis uses `-fps_mode vfr`; a simulated analysis failure continues safely with a warning.
@@ -60,6 +60,8 @@ EDITORIAL / VIEWER ACCEPTANCE
 - Fresh projects benchmark encoders automatically. No-SFX exports stream-copy
   source audio, with an automatic AAC compatibility fallback when required.
 - Pre-flight uses a yellow SRT state for nonfatal timing warnings instead of a green claim.
+- Automatic planning and background rendering show task number, current-task
+  start/elapsed/ETA, and whole-job elapsed/remaining/total estimates.
 
 WINDOWS SMOKE STATUS
 - Tests ran on Windows using the application's configured shared Python and FFmpeg.

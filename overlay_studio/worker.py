@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 
 from .project import load_project
+from .progress import ProgressEstimator, RENDER_TASKS
 from .render import RenderCancelled, render_full_resumable
 
 
@@ -46,13 +47,13 @@ def _write_status(path: Path, *, strict: bool = True, **values: object) -> bool:
 def run(project_path: Path, output: Path, status: Path, stop: Path) -> int:
     app_root = Path(__file__).resolve().parents[1]
     video, _, entries, settings = load_project(project_path)
+    estimator = ProgressEstimator(RENDER_TASKS)
     _write_status(
         status,
         state="running",
-        progress=0.0,
-        label="Starting background render",
         pid=os.getpid(),
         output=str(output),
+        **estimator.snapshot(0.0, "Starting background render"),
     )
 
     def progress(value: float, label: str) -> None:
@@ -60,10 +61,9 @@ def run(project_path: Path, output: Path, status: Path, stop: Path) -> int:
             status,
             strict=False,
             state="running",
-            progress=max(0.0, min(1.0, float(value))),
-            label=label,
             pid=os.getpid(),
             output=str(output),
+            **estimator.snapshot(value, label),
         )
 
     try:
@@ -80,9 +80,8 @@ def run(project_path: Path, output: Path, status: Path, stop: Path) -> int:
         _write_status(
             status,
             state="complete",
-            progress=1.0,
-            label="Final video verified",
             output=str(result),
+            **estimator.snapshot(1.0, "Final video verified"),
         )
         return 0
     except RenderCancelled as exc:
