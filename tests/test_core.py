@@ -156,6 +156,13 @@ class PlanningTests(unittest.TestCase):
         finally:
             start_overlay._port_available = original
 
+    def test_launcher_fingerprints_source_to_avoid_stale_imports(self):
+        fingerprint = start_overlay._source_fingerprint()
+        self.assertEqual(len(fingerprint), 64)
+        launcher = (ROOT / "start_overlay.py").read_text(encoding="utf-8")
+        self.assertIn("SOURCE_STAMP_FILE", launcher)
+        self.assertIn("same_source", launcher)
+
     def test_project_reopen_preserves_random_seed(self):
         with tempfile.TemporaryDirectory() as temp_string:
             temp = Path(temp_string)
