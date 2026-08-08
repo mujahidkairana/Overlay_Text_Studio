@@ -190,6 +190,8 @@ def entries_to_table(entries: Iterable[OverlayEntry]) -> pd.DataFrame:
                 "EFFECT": item.effect,
                 "SAFETY_SCORE": round(item.safety_score, 1),
                 "CONFIDENCE": item.confidence,
+                "READING_CPS": item.reading_cps,
+                "READING_STATUS": item.reading_status,
                 "NOTE": item.note,
                 "LOCK_STYLE": item.lock_style,
             }

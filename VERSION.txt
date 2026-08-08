@@ -1,2 +1,2 @@
-Overlay Text Studio v2.1.0
-Portable GitHub-ready automatic workflow
+Overlay Text Studio v2.3.0
+Background rendering, automatic encoder benchmark, and viewer QA

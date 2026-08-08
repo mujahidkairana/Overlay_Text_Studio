@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
+import os
 from pathlib import Path
+from threading import Lock
 from typing import Callable, Iterable
 
 import numpy as np
@@ -18,6 +21,7 @@ except ImportError:  # pragma: no cover - optional fallback
 
 
 ProgressCallback = Callable[[float, str], None]
+_FACE_DETECT_LOCK = Lock()
 
 
 @dataclass(slots=True)
@@ -93,7 +97,11 @@ def _face_boxes(path_string: str) -> tuple[tuple[int, int, int, int], ...]:
     frame = cv2.imread(path_string, cv2.IMREAD_GRAYSCALE)
     if frame is None:
         return ()
-    faces = detector.detectMultiScale(frame, scaleFactor=1.12, minNeighbors=5, minSize=(24, 24))
+    # OpenCV's shared cascade instance is not guaranteed to be thread-safe.
+    with _FACE_DETECT_LOCK:
+        faces = detector.detectMultiScale(
+            frame, scaleFactor=1.12, minNeighbors=5, minSize=(24, 24)
+        )
     return tuple((int(x), int(y), int(x + w), int(y + h)) for x, y, w, h in faces)
 
 
@@ -216,18 +224,60 @@ def analyze_entries(
     *,
     sample_fps: float = 1.0,
     progress: ProgressCallback | None = None,
+    max_workers: int | None = None,
 ) -> list[OverlayEntry]:
     planned = list(entries)
+    enabled = [entry for entry in planned if entry.enabled]
+    workers = max_workers or min(4, max(1, (os.cpu_count() or 2) // 2))
+    workers = max(1, min(workers, len(enabled) or 1))
+    scored: dict[int, list[RegionScore]] = {}
+    if workers == 1:
+        for index, entry in enumerate(enabled):
+            scored[id(entry)] = score_regions_for_entry(
+                entry, frames, sample_fps=sample_fps
+            )
+            if progress:
+                progress(
+                    (index + 1) / max(1, len(enabled)) * 0.85,
+                    f"Analyzing {entry.scene_id}",
+                )
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(
+                    score_regions_for_entry, entry, frames, sample_fps=sample_fps
+                ): entry
+                for entry in enabled
+            }
+            for completed, future in enumerate(as_completed(futures), start=1):
+                entry = futures[future]
+                scored[id(entry)] = future.result()
+                if progress:
+                    progress(
+                        completed / max(1, len(enabled)) * 0.85,
+                        f"Parallel analysis {completed}/{len(enabled)}",
+                    )
+
     recent: list[str] = []
+    active: list[OverlayEntry] = []
     total = max(1, len(planned))
     for index, entry in enumerate(planned):
         if not entry.enabled:
             continue
-        scores = score_regions_for_entry(entry, frames, sample_fps=sample_fps)
+        active = [other for other in active if other.end_frame > entry.start_frame]
+        scores = scored[id(entry)]
         if entry.position in POSITIONS:
             chosen = next(score for score in scores if score.position == entry.position)
         else:
             chosen = scores[0]
+            used_positions = {other.resolved_position for other in active}
+            if chosen.position in used_positions:
+                alternative = next(
+                    (score for score in scores if score.position not in used_positions),
+                    None,
+                )
+                if alternative is not None:
+                    chosen = alternative
             # Avoid visual monotony only when the alternative is almost equally safe.
             if len(recent) >= 3 and len(set(recent[-3:])) == 1 and chosen.position == recent[-1]:
                 close_alternative = next(
@@ -247,6 +297,7 @@ def analyze_entries(
             entry.confidence = "REVIEW"
             entry.note = "Busy top area; stronger text protection applied"
         recent.append(chosen.position)
+        active.append(entry)
         if progress:
-            progress((index + 1) / total, f"Safe-zone analysis: {entry.scene_id}")
+            progress(0.85 + (index + 1) / total * 0.15, f"Placing {entry.scene_id}")
     return planned

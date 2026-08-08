@@ -7,13 +7,13 @@ from typing import Any
 
 POSITIONS = ("TOP_LEFT", "TOP_CENTER", "TOP_RIGHT")
 ANIMATIONS = (
-    "FADE_RISE",
-    "SLIDE_IN",
-    "SOFT_POP",
-    "GENTLE_DROP",
-    "SHORT_DRIFT",
+    "EASE_UP",
+    "EASE_SIDE",
+    "SOFT_SCALE",
+    "FOCUS_IN",
+    "FADE_ONLY",
 )
-EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "STRONG_OUTLINE", "SOFT_GLOW")
+EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "PROTECTED_PLATE", "STRONG_OUTLINE")
 
 
 @dataclass(slots=True)
@@ -49,6 +49,8 @@ class OverlayEntry:
     note: str = ""
     lock_style: bool = False
     accent_word: str = ""
+    reading_cps: float = 0.0
+    reading_status: str = "NOT_CHECKED"
 
     @property
     def duration_frames(self) -> int:
@@ -73,7 +75,7 @@ class ProjectSettings:
     fps: int = 30
     output_width: int = 3840
     output_height: int = 2160
-    analysis_fps: float = 1.0
+    analysis_fps: float = 0.5
     random_seed: int = 20260807
     font_name: str = "Segoe UI Semibold"
     font_file: str = ""
@@ -83,11 +85,13 @@ class ProjectSettings:
     safe_side_percent: float = 4.5
     caption_safe_percent: float = 35.0
     chunk_target_seconds: int = 60
-    encoder: str = "libx264"
+    encoder: str = "auto"
     x264_preset: str = "veryfast"
     crf: int = 18
     end_time_is_exclusive: bool = True
     keep_analysis_frames: bool = True
+    style_preset: str = "YOUTUBE_PRO"
+    parallel_analysis_workers: int = 4
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -100,4 +104,3 @@ class ProjectSettings:
     def project_dir(self, base: str | Path) -> Path:
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in self.project_name)
         return Path(base).expanduser().resolve() / safe
-

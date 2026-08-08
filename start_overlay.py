@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import socket
 import subprocess
@@ -21,6 +22,7 @@ LOG_DIR = ROOT / "logs"
 LOG_FILE = LOG_DIR / "streamlit.log"
 PORT_FILE = LOG_DIR / "current_port.txt"
 PID_FILE = LOG_DIR / "streamlit.pid"
+SOURCE_STAMP_FILE = LOG_DIR / "source_fingerprint.txt"
 
 
 def _read_int(path: Path) -> int | None:
@@ -28,6 +30,16 @@ def _read_int(path: Path) -> int | None:
         return int(path.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return None
+
+
+def _source_fingerprint() -> str:
+    digest = hashlib.sha256()
+    sources = [ROOT / "app.py", ROOT / "start_overlay.py"]
+    sources.extend(sorted((ROOT / "overlay_studio").glob("*.py")))
+    for source in sources:
+        digest.update(source.name.encode("utf-8"))
+        digest.update(source.read_bytes())
+    return digest.hexdigest()
 
 
 def _ready(port: int) -> bool:
@@ -86,7 +98,13 @@ def run(no_browser: bool = False) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     saved_port = _read_int(PORT_FILE)
     saved_pid = _read_int(PID_FILE)
-    if saved_port and (_ready(saved_port) or _pid_running(saved_pid)):
+    current_source = _source_fingerprint()
+    try:
+        saved_source = SOURCE_STAMP_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        saved_source = ""
+    same_source = saved_source == current_source
+    if saved_port and same_source and (_ready(saved_port) or _pid_running(saved_pid)):
         for _ in range(45):
             if _ready(saved_port):
                 print(f"Overlay Text Studio is already running on port {saved_port}.")
@@ -94,6 +112,8 @@ def run(no_browser: bool = False) -> int:
                     _open(saved_port)
                 return 0
             time.sleep(1)
+    elif saved_port and not same_source and _ready(saved_port):
+        print("App code changed; starting a fresh server instead of reusing the old one.")
 
     port = _find_port()
     command = [
@@ -127,6 +147,7 @@ def run(no_browser: bool = False) -> int:
         )
     PORT_FILE.write_text(str(port), encoding="utf-8")
     PID_FILE.write_text(str(process.pid), encoding="utf-8")
+    SOURCE_STAMP_FILE.write_text(current_source, encoding="utf-8")
     for _ in range(STARTUP_TIMEOUT):
         if _ready(port):
             if not no_browser:
@@ -147,4 +168,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

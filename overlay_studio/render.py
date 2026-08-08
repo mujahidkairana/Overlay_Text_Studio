@@ -52,6 +52,16 @@ def _encoder_args(settings: ProjectSettings) -> list[str]:
             "-look_ahead",
             "0",
         ]
+    if settings.encoder == "h264_nvenc":
+        return [
+            "-c:v", "h264_nvenc", "-preset", "p4",
+            "-rc", "vbr", "-cq", str(settings.crf), "-b:v", "0",
+        ]
+    if settings.encoder == "h264_amf":
+        return [
+            "-c:v", "h264_amf", "-quality", "speed",
+            "-rc", "cqp", "-qp_i", str(settings.crf), "-qp_p", str(settings.crf),
+        ]
     return [
         "-c:v",
         "libx264",
@@ -59,7 +69,73 @@ def _encoder_args(settings: ProjectSettings) -> list[str]:
         settings.x264_preset,
         "-crf",
         str(settings.crf),
+        "-tune",
+        "stillimage",
     ]
+
+
+def select_fast_encoder(
+    app_root: str | Path,
+    cache_path: str | Path,
+    *,
+    crf: int = 18,
+) -> tuple[str, dict[str, float]]:
+    """Benchmark available encoders once and cache the fastest reliable choice."""
+    cache = Path(cache_path)
+    if cache.exists():
+        try:
+            payload = json.loads(cache.read_text(encoding="utf-8"))
+            selected = str(payload.get("selected", ""))
+            timings = {
+                str(key): float(value)
+                for key, value in dict(payload.get("seconds", {})).items()
+            }
+            if selected in {"libx264", "h264_qsv", "h264_nvenc", "h264_amf"}:
+                return selected, timings
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+
+    timings: dict[str, float] = {}
+    for encoder in ("h264_nvenc", "h264_qsv", "h264_amf", "libx264"):
+        probe_settings = ProjectSettings(
+            output_width=1280,
+            output_height=720,
+            encoder=encoder,
+            x264_preset="veryfast",
+            crf=crf,
+        )
+        command = [
+            ffmpeg_path(app_root),
+            "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=3",
+            *_encoder_args(probe_settings),
+            "-pix_fmt", "yuv420p", "-f", "null", os.devnull,
+        ]
+        started = time.monotonic()
+        completed = subprocess.run(command, capture_output=True, text=True)
+        if completed.returncode == 0:
+            timings[encoder] = round(time.monotonic() - started, 3)
+
+    cpu_time = timings.get("libx264")
+    hardware = {
+        name: seconds
+        for name, seconds in timings.items()
+        if name != "libx264"
+    }
+    if hardware:
+        hardware_name = min(hardware, key=hardware.get)
+        if cpu_time is None or hardware[hardware_name] <= cpu_time * 1.40:
+            selected = hardware_name
+        else:
+            selected = "libx264"
+    else:
+        selected = "libx264"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(
+        json.dumps({"selected": selected, "seconds": timings}, indent=2),
+        encoding="utf-8",
+    )
+    return selected, timings
 
 
 def _run_ffmpeg(
