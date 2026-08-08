@@ -57,6 +57,22 @@ def _between_expression(intervals: list[tuple[float, float]]) -> str:
     return "+".join(f"between(t\\,{start:.6f}\\,{end:.6f})" for start, end in intervals)
 
 
+def _eased_interval_expression(
+    intervals: list[tuple[float, float]], *, ramp_seconds: float = 0.25
+) -> str:
+    expressions: list[str] = []
+    for start, end in intervals:
+        ramp = max(1 / 30, min(ramp_seconds, (end - start) / 2))
+        expressions.append(
+            "if(between(t\\,{start:.6f}\\,{end:.6f})\\,"
+            "max(0\\,min(1\\,min((t-{start:.6f})/{ramp:.6f}\\,"
+            "({end:.6f}-t)/{ramp:.6f})))\\,0)".format(
+                start=start, end=end, ramp=ramp
+            )
+        )
+    return "+".join(expressions) if expressions else "0"
+
+
 def _base_video_filter(settings: ProjectSettings) -> str:
     return (
         f"fps={settings.fps},"
@@ -84,8 +100,8 @@ def _post_scale_filters(
     )
     effects: list[str] = []
     if punch_intervals:
-        active = _between_expression(punch_intervals)
-        zoom = f"1+0.05*min(1\\,{active})"
+        eased = _eased_interval_expression(punch_intervals)
+        zoom = f"1+0.05*min(1\\,{eased})"
         effects.extend(
             [
                 f"scale=w='iw*({zoom})':h='ih*({zoom})':eval=frame",

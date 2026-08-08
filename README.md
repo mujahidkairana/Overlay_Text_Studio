@@ -134,12 +134,19 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Long SRT pauses can promote an existing nearby overlay to a section cue; the app
   never invents narration or overlay wording.
 - Measured motion and image detail automatically suppress aggressive effects.
+- Punch-ins ease in and out over roughly 250 ms instead of snapping between zoom levels.
+- Dim/focus and optional SFX use separate spacing rules to avoid repetitive pulsing or clustered sounds.
+- Scene-cut detection uses current FFmpeg syntax and fails soft: safe overlays continue if analysis is unavailable.
+- SRT timing is checked against the selected video to catch likely file mismatches.
+- Auto resolution now preserves the source dimensions (rounded down only when an odd encoder-unsafe dimension is found).
 - Number, evidence, comparison, warning, uncertainty, takeaway, question, and
   section overlays receive distinct restrained treatments.
 - Punch-ins are limited to a subtle 5%; focus dimming is mild and temporary.
 - Freeze emphasis replaces frames inside the existing timeline and never adds duration.
 - Optional local SFX are mixed quietly below narration with limiter protection.
 - `editorial_plan.json` and the in-app Creative Variation Report summarize editing patterns.
+- A compact automatic pre-flight confirms video duration, caption/overlay counts,
+  output resolution, encoder, free space, and optional SFX issues before analysis begins.
 
 ## Font-size guide at 4K
 

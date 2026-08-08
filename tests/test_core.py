@@ -11,7 +11,7 @@ from PIL import Image
 from overlay_studio.ass import _estimated_text_width, build_ass
 from overlay_studio.layout import plan_layout_and_styles
 from overlay_studio.media import extract_analysis_frames, ffmpeg_path, ffprobe_path, probe_video
-from overlay_studio.models import OverlayEntry, ProjectSettings, VideoInfo
+from overlay_studio.models import OverlayEntry, ProjectSettings, VideoInfo, source_matched_dimensions
 from overlay_studio.project import load_project, save_project
 from overlay_studio.render import (
     RenderCancelled,
@@ -56,6 +56,10 @@ class TimingTests(unittest.TestCase):
 
 
 class PlanningTests(unittest.TestCase):
+    def test_auto_resolution_really_matches_source_without_odd_dimensions(self):
+        self.assertEqual(source_matched_dimensions(1280, 720), (1280, 720))
+        self.assertEqual(source_matched_dimensions(2560, 1440), (2560, 1440))
+        self.assertEqual(source_matched_dimensions(1921, 1081), (1920, 1080))
     def test_automatic_positions_never_enter_caption_band(self):
         height = 1080
         caption_y0 = round(height * 0.65)
@@ -347,9 +351,20 @@ class SetupFlowTests(unittest.TestCase):
 
     def test_setup_has_portable_default_and_no_required_checkout_path(self):
         script = (ROOT / "shared_setup.ps1").read_text(encoding="utf-8")
+        setup_launcher = (ROOT / "SETUP_ONCE.bat").read_text(encoding="utf-8")
+        app_launcher = (ROOT / "START_APP.bat").read_text(encoding="utf-8")
         self.assertIn("OVERLAY_STUDIO_SHARED_COMPONENTS", script)
         self.assertIn("OverlayTextStudio\\Shared_Components", script)
         self.assertNotIn("D:\\MUZ\\", script)
+        self.assertIn("Overlay Text Studio v3", setup_launcher)
+        self.assertIn("Overlay Text Studio v3", app_launcher)
+
+    def test_windows_ci_avoids_duplicate_feature_branch_runs(self):
+        workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("push:\n    branches:\n      - main", workflow)
 
     def test_branch_helper_uses_repository_wide_daily_sequence(self):
         helper = (ROOT / "scripts" / "new_branch.ps1").read_text(encoding="utf-8")

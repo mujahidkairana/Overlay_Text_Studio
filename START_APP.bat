@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
-title Overlay Text Studio v2
+title Overlay Text Studio v3
 if not exist logs mkdir logs
 if not exist runtime_path.txt (
     echo Setup has not completed yet. Starting SETUP_ONCE.bat...

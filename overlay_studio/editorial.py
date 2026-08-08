@@ -14,6 +14,7 @@ from .srt import CaptionInterval, active_captions, long_caption_gaps
 DENSITY_STRONG_EVENTS_PER_MINUTE = {"CALM": 2, "STANDARD": 3, "ENERGETIC": 4}
 TARGET_EVENTS_PER_MINUTE = {"CALM": 4, "STANDARD": 6, "ENERGETIC": 7}
 STRONG_ACTIONS = {"PUNCH_IN", "FREEZE"}
+MEDIUM_ACTIONS = {"DIM_FOCUS"}
 
 
 def _caption_is_busy(entry: OverlayEntry, captions: list[CaptionInterval]) -> bool:
@@ -81,11 +82,19 @@ def plan_editorial_actions(
     freeze_count = 0
     sfx_count = 0
     selected_action_frames: list[int] = []
+    last_medium_frame: int | None = None
+    last_sfx_frame: int | None = None
     total_frames = max((entry.end_frame for entry in planned), default=0)
     freeze_cap = max(1, math.ceil(total_frames / settings.fps / 600.0 * 4))
     sfx_per_ten_minutes = {"CALM": 8, "STANDARD": 10, "ENERGETIC": 12}.get(preset, 10)
     sfx_cap = max(1, math.ceil(total_frames / settings.fps / 600.0 * sfx_per_ten_minutes))
     cooldown_frames = settings.fps * (12 if preset == "CALM" else 8 if preset == "STANDARD" else 5)
+    medium_cooldown_frames = settings.fps * (
+        6 if preset == "CALM" else 5 if preset == "STANDARD" else 4
+    )
+    sfx_cooldown_frames = settings.fps * (
+        10 if preset == "CALM" else 8 if preset == "STANDARD" else 6
+    )
 
     for entry in planned:
         _semantic_style(entry)
@@ -102,17 +111,17 @@ def plan_editorial_actions(
         else:
             requested = "NONE"
 
+        unsafe_motion = (
+            entry.confidence == "REVIEW"
+            or entry.motion_score >= 0.10
+            or entry.detail_score >= 0.34
+            or _caption_is_busy(entry, caption_list)
+        )
         if requested in STRONG_ACTIONS:
             minute_start = max(0, entry.start_frame - settings.fps * 60)
             recent_strong_frames = [frame for frame in recent_strong_frames if frame >= minute_start]
             too_close = bool(recent_strong_frames) and entry.start_frame - recent_strong_frames[-1] < cooldown_frames
             too_many = len(recent_strong_frames) >= maximum_per_minute
-            unsafe_motion = (
-                entry.confidence == "REVIEW"
-                or entry.motion_score >= 0.10
-                or entry.detail_score >= 0.34
-                or _caption_is_busy(entry, caption_list)
-            )
             recent_overlay_count = sum(
                 other.start_frame <= entry.start_frame
                 and other.start_frame >= minute_start
@@ -124,6 +133,13 @@ def plan_editorial_actions(
                 >= TARGET_EVENTS_PER_MINUTE.get(preset, 6)
             )
             if too_close or too_many or unsafe_motion or density_full:
+                requested = "NONE"
+        elif requested in MEDIUM_ACTIONS:
+            too_close = (
+                last_medium_frame is not None
+                and entry.start_frame - last_medium_frame < medium_cooldown_frames
+            )
+            if too_close or unsafe_motion:
                 requested = "NONE"
 
         internal_cuts = cuts_inside(settings.scene_cut_frames, entry.start_frame, entry.end_frame)
@@ -137,16 +153,23 @@ def plan_editorial_actions(
                     entry.action_end_frame,
                     entry.action_start_frame + round(settings.fps * 0.6),
                 )
-        if entry.sfx != "NONE":
-            if sfx_count >= sfx_cap:
+        if entry.sfx not in {"", "NONE", "AUTO"}:
+            too_close = (
+                last_sfx_frame is not None
+                and entry.start_frame - last_sfx_frame < sfx_cooldown_frames
+            )
+            if sfx_count >= sfx_cap or too_close:
                 entry.sfx = "NONE"
             else:
                 sfx_count += 1
+                last_sfx_frame = entry.start_frame
         if entry.action_end_frame - entry.action_start_frame < settings.fps // 2:
             requested = "NONE"
         entry.visual_action = requested
         if requested in STRONG_ACTIONS:
             recent_strong_frames.append(entry.start_frame)
+        if requested in MEDIUM_ACTIONS:
+            last_medium_frame = entry.start_frame
         if requested != "NONE":
             selected_action_frames.append(entry.start_frame)
         if requested == "FREEZE":

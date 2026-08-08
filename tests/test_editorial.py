@@ -110,6 +110,43 @@ class EditorialPlannerTests(unittest.TestCase):
         plan_editorial_actions(sfx_entries, ProjectSettings(density_preset="STANDARD"))
         self.assertLessEqual(sum(entry.sfx != "NONE" for entry in sfx_entries), 10)
 
+    def test_dim_focus_and_sfx_have_independent_spacing(self):
+        dim_entries = [
+            OverlayEntry(
+                str(index), index * 60, index * 60 + 45, "QUESTION?",
+                semantic_type="QUESTION", confidence="HIGH",
+            )
+            for index in range(3)
+        ]
+        plan_editorial_actions(dim_entries, ProjectSettings(density_preset="STANDARD"))
+        self.assertEqual(dim_entries[0].visual_action, "DIM_FOCUS")
+        self.assertEqual(dim_entries[1].visual_action, "NONE")
+
+        sfx_entries = [
+            OverlayEntry("A", 0, 60, "ONE", sfx="SOFT_HIT"),
+            OverlayEntry("B", 90, 150, "TWO", sfx="SUBTLE_WHOOSH"),
+        ]
+        plan_editorial_actions(sfx_entries, ProjectSettings(density_preset="STANDARD"))
+        self.assertEqual(sfx_entries[0].sfx, "SOFT_HIT")
+        self.assertEqual(sfx_entries[1].sfx, "NONE")
+
+    def test_short_warning_plate_accounts_for_caution_prefix(self):
+        warning = OverlayEntry(
+            "W", 0, 60, "DANGER", semantic_type="WARNING",
+            font_size_px=64, wrapped_text="DANGER",
+        )
+        _, _, plate_width, _, _ = _protected_plate_geometry(
+            warning, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
+        )
+        fact = OverlayEntry(
+            "F", 0, 60, "DANGER", semantic_type="FACT",
+            font_size_px=64, wrapped_text="DANGER",
+        )
+        _, _, fact_width, _, _ = _protected_plate_geometry(
+            fact, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
+        )
+        self.assertGreater(plate_width, fact_width)
+
 
 if __name__ == "__main__":
     unittest.main()
