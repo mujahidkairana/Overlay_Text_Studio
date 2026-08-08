@@ -55,6 +55,16 @@ class EditorialPlannerTests(unittest.TestCase):
         self.assertEqual(punch.visual_action, "NONE")
         self.assertEqual(low_freeze.visual_action, "NONE")
 
+    def test_failed_scene_analysis_also_disables_dim_focus(self):
+        dim = OverlayEntry(
+            "D", 0, 90, "WHAT HAPPENED?", semantic_type="QUESTION",
+            priority="MEDIUM", confidence="HIGH",
+        )
+        plan_editorial_actions(
+            [dim], ProjectSettings(scene_analysis_available=False)
+        )
+        self.assertEqual(dim.visual_action, "NONE")
+
     def test_report_is_variation_not_monetization_score(self):
         report = editorial_report([OverlayEntry("A", 0, 60, "FACT")], 60.0)
         self.assertEqual(report["events_per_minute"], 1.0)
