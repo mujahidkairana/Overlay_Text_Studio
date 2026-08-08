@@ -189,6 +189,22 @@ class PlanningTests(unittest.TestCase):
         finally:
             start_overlay._port_available = original
 
+    def test_launcher_only_stops_verified_owned_server(self):
+        with patch.object(
+            start_overlay, "_pid_running", side_effect=[True, False, False]
+        ), patch.object(
+            start_overlay, "_owned_streamlit_process", return_value=True
+        ), patch.object(start_overlay.subprocess, "run") as terminate:
+            self.assertTrue(start_overlay._stop_owned_server(1234, timeout=0.1))
+            terminate.assert_called_once()
+
+    def test_launcher_refuses_to_stop_unverified_process(self):
+        with patch.object(
+            start_overlay, "_owned_streamlit_process", return_value=False
+        ), patch.object(start_overlay.subprocess, "run") as terminate:
+            self.assertFalse(start_overlay._stop_owned_server(1234))
+            terminate.assert_not_called()
+
     def test_launcher_fingerprints_source_to_avoid_stale_imports(self):
         fingerprint = start_overlay._source_fingerprint()
         self.assertEqual(len(fingerprint), 64)

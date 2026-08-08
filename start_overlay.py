@@ -70,6 +70,40 @@ def _pid_running(pid: int | None) -> bool:
         return False
 
 
+def _owned_streamlit_process(pid: int | None) -> bool:
+    if not _pid_running(pid):
+        return False
+    if os.name != "nt":
+        return True
+    script = (
+        f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}'; "
+        "if($p){$p.CommandLine}"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True, text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    command = result.stdout.lower().replace("/", "\\")
+    return "streamlit" in command and str((ROOT / "app.py").resolve()).lower() in command
+
+
+def _stop_owned_server(pid: int | None, timeout: float = 8.0) -> bool:
+    if not _owned_streamlit_process(pid):
+        return False
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T"], capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    else:
+        os.kill(int(pid), 15)
+    deadline = time.monotonic() + timeout
+    while _pid_running(pid) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return not _pid_running(pid)
+
+
 def _port_available(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
@@ -112,8 +146,11 @@ def run(no_browser: bool = False) -> int:
                     _open(saved_port)
                 return 0
             time.sleep(1)
-    elif saved_port and not same_source and _ready(saved_port):
-        print("App code changed; starting a fresh server instead of reusing the old one.")
+    elif saved_port and not same_source and (_ready(saved_port) or _pid_running(saved_pid)):
+        if _stop_owned_server(saved_pid):
+            print("App code changed; safely replaced the previous Overlay Text Studio server.")
+        else:
+            print("Saved process could not be verified as Overlay Text Studio; it was not stopped.")
 
     port = _find_port()
     command = [

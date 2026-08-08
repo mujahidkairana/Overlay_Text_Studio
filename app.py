@@ -7,6 +7,7 @@ import random
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +27,10 @@ from overlay_studio.models import (
     source_matched_dimensions,
 )
 from overlay_studio.project import apply_edited_table, load_project_data, save_project
+from overlay_studio.progress import PLANNING_TASKS, ProgressEstimator, RENDER_TASKS
+from overlay_studio.render_lock import acquire as acquire_render_lock
+from overlay_studio.render_lock import release as release_render_lock
+from overlay_studio.render_lock import update as update_render_lock
 from overlay_studio.render import (
     RenderCancelled,
     ensure_free_space,
@@ -207,7 +212,7 @@ def _next_output_path(output_root: str, video_stem: str) -> Path:
     raise ValueError("Could not choose a free automatic output filename.")
 
 
-def _run_progress(callable_with_progress):
+def _run_progress_legacy(callable_with_progress):
     bar = st.progress(0.0)
     status = st.empty()
     started = time.monotonic()
@@ -224,6 +229,95 @@ def _run_progress(callable_with_progress):
 
     result = callable_with_progress(update)
     bar.progress(1.0)
+    return result
+
+
+def _format_duration(seconds: object) -> str:
+    if seconds is None:
+        return "Calculating..."
+    total = max(0, int(round(float(seconds))))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+def _show_progress_details(target, details: dict[str, object]) -> None:
+    details = dict(details)
+    snapshot_at = details.get("snapshot_at")
+    if snapshot_at is not None and float(details.get("progress", 0.0)) < 1.0:
+        live_delta = max(0.0, time.time() - float(snapshot_at))
+        for elapsed_key in ("current_elapsed_seconds", "total_elapsed_seconds"):
+            if details.get(elapsed_key) is not None:
+                details[elapsed_key] = float(details[elapsed_key]) + live_delta
+        for remaining_key in (
+            "current_estimated_remaining_seconds",
+            "total_estimated_remaining_seconds",
+        ):
+            if details.get(remaining_key) is not None:
+                details[remaining_key] = max(
+                    0.0, float(details[remaining_key]) - live_delta
+                )
+    with target.container():
+        st.markdown(
+            f"**Task {details['task_index']} of {details['task_count']}: "
+            f"{details['task_name']}**"
+        )
+        st.caption(str(details.get("label", "Working")))
+        first, second, third = st.columns(3)
+        first.metric("Stage started", details.get("task_started_text", "—"))
+        second.metric(
+            "Stage elapsed",
+            _format_duration(details.get("current_elapsed_seconds")),
+        )
+        third.metric(
+            "Stage remaining (estimate)",
+            _format_duration(details.get("current_estimated_remaining_seconds")),
+        )
+        if details.get("chunk_number"):
+            chunk_started = datetime.fromtimestamp(
+                float(details["chunk_started_at"])
+            ).strftime("%I:%M:%S %p")
+            live_chunk_elapsed = float(details.get("chunk_elapsed_seconds", 0.0))
+            if snapshot_at is not None and float(details.get("progress", 0.0)) < 1.0:
+                live_chunk_elapsed += max(0.0, time.time() - float(snapshot_at))
+            st.caption(
+                f"Current chunk {details['chunk_number']} of {details['chunk_count']} | "
+                f"started {chunk_started} | elapsed {_format_duration(live_chunk_elapsed)}"
+            )
+        fourth, fifth, sixth = st.columns(3)
+        fourth.metric(
+            "Total elapsed", _format_duration(details.get("total_elapsed_seconds"))
+        )
+        fifth.metric(
+            "Total remaining (estimate)",
+            _format_duration(details.get("total_estimated_remaining_seconds")),
+        )
+        sixth.metric(
+            "Total time (estimate)",
+            _format_duration(details.get("total_estimated_seconds")),
+        )
+
+
+def _run_progress(callable_with_progress, stages=RENDER_TASKS):
+    bar = st.progress(0.0)
+    dashboard = st.empty()
+    estimator = ProgressEstimator(stages)
+
+    def update(value: float, label: str) -> None:
+        normalized = max(0.0, min(1.0, float(value)))
+        details = estimator.snapshot(normalized, label)
+        bar.progress(
+            normalized,
+            text=f"Task {details['task_index']} of {details['task_count']}",
+        )
+        _show_progress_details(dashboard, details)
+
+    result = callable_with_progress(update)
+    update(1.0, "Complete")
     return result
 
 
@@ -447,21 +541,28 @@ if st.button(
                 fps=settings.fps,
                 warning_callback=scene_warning,
             )
+            progress(0.15, "Scene-change detection complete")
             frames = extract_analysis_frames(
                 video.path,
                 project_dir / "cache" / "analysis_frames",
                 sample_fps=settings.analysis_fps,
                 app_root=APP_ROOT,
                 duration_seconds=video.duration_seconds,
-                progress=progress,
+                progress=lambda value, label: progress(
+                    0.15 + max(0.0, min(1.0, value)) * 0.25, label
+                ),
             )
+            progress(0.40, "Analysis frames ready")
             analyze_entries(
                 entries,
                 frames,
                 sample_fps=settings.analysis_fps,
-                progress=progress,
+                progress=lambda value, label: progress(
+                    0.40 + max(0.0, min(1.0, value)) * 0.50, label
+                ),
                 max_workers=settings.parallel_analysis_workers,
             )
+            progress(0.90, "Building automatic layout and editorial plan")
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
             plan_editorial_actions(entries, settings, captions=captions)
             st.session_state.editorial_report = editorial_report(
@@ -470,9 +571,10 @@ if st.button(
             write_editorial_report(
                 project_dir / "editorial_plan.json", entries, video.duration_seconds
             )
+            progress(1.0, "Automatic plan ready")
             return frames
 
-        _run_progress(automatic_plan)
+        _run_progress(automatic_plan, PLANNING_TASKS)
         st.session_state.video_info = video
         st.session_state.entries = entries
         st.session_state.settings = settings
@@ -493,9 +595,18 @@ if st.button(
         st.session_state.final_output_path = str(output_path)
         cancel_file = project_dir / "STOP_RENDER.REQUEST"
         status_file = project_dir / "render_status.json"
+        ensure_free_space(project_dir, video, settings)
+        lock_token, active_owner = acquire_render_lock(project_dir)
+        if lock_token is None:
+            st.session_state.render_status_path = str(status_file)
+            owner_pid = active_owner.get("pid") if active_owner else "unknown"
+            st.warning(
+                f"A render is already active for this project (worker PID {owner_pid}). "
+                "Showing its existing status instead."
+            )
+            st.stop()
         cancel_file.unlink(missing_ok=True)
         status_file.unlink(missing_ok=True)
-        ensure_free_space(project_dir, video, settings)
         log_path = project_dir / "background_render.log"
         command = [
             sys.executable,
@@ -509,14 +620,18 @@ if st.button(
             str(status_file),
             "--stop",
             str(cancel_file),
+            "--lock-token",
+            lock_token,
         ]
+        launch_progress = ProgressEstimator(RENDER_TASKS).snapshot(
+            0.0, "Launching background render"
+        )
         status_file.write_text(
             json.dumps(
                 {
                     "state": "running",
-                    "progress": 0.0,
-                    "label": "Launching background render",
                     "output": str(output_path),
+                    **launch_progress,
                 },
                 indent=2,
             ),
@@ -527,16 +642,23 @@ if st.button(
             flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
                 subprocess, "CREATE_NO_WINDOW", 0
             )
-        with log_path.open("ab", buffering=0) as log:
-            process = subprocess.Popen(
-                command,
-                cwd=APP_ROOT,
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                creationflags=flags,
-                start_new_session=os.name != "nt",
+        try:
+            with log_path.open("ab", buffering=0) as log:
+                process = subprocess.Popen(
+                    command,
+                    cwd=APP_ROOT,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    creationflags=flags,
+                    start_new_session=os.name != "nt",
+                )
+            update_render_lock(
+                project_dir, lock_token, pid=process.pid, state="starting"
             )
+        except Exception:
+            release_render_lock(project_dir, lock_token)
+            raise
         st.session_state.render_status_path = str(status_file)
         st.success("Background render started. You can safely leave this page open.")
     except (TimingValidationError, SRTValidationError, MediaError, OSError, ValueError) as exc:
@@ -568,7 +690,7 @@ if st.session_state.video_info is not None:
                 )
             st.json(report, expanded=False)
 
-@st.fragment(run_every=2)
+@st.fragment(run_every=5)
 def _render_monitor() -> None:
     status_text = st.session_state.get("render_status_path", "")
     if not status_text:
@@ -584,7 +706,16 @@ def _render_monitor() -> None:
     progress = float(status.get("progress", 0.0))
     label = str(status.get("label", "Rendering"))
     if state == "running":
-        st.progress(max(0.0, min(1.0, progress)), text=label)
+        task_index = status.get("task_index")
+        task_count = status.get("task_count")
+        progress_text = (
+            f"Task {task_index} of {task_count}"
+            if task_index is not None and task_count is not None
+            else label
+        )
+        st.progress(max(0.0, min(1.0, progress)), text=progress_text)
+        if task_index is not None:
+            _show_progress_details(st.empty(), status)
         if st.button("Stop background render safely", width="stretch"):
             status_path.parent.joinpath("STOP_RENDER.REQUEST").write_text(
                 "stop", encoding="utf-8"

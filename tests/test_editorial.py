@@ -98,18 +98,16 @@ class EditorialPlannerTests(unittest.TestCase):
         plan_editorial_actions(entries, ProjectSettings())
         self.assertEqual({entry.semantic_type: entry.effect for entry in entries}, expected)
         rendered = build_ass(entries, ProjectSettings(output_width=1920, output_height=1080))
-        self.assertIn("EVIDENCE", rendered)
-        self.assertIn("CAUTION", rendered)
-        self.assertIn("POSSIBLE / NOT PROVEN", rendered)
-        self.assertIn("POSSIBLE / NOT PROVEN\\N{\\fs64", rendered)
+        self.assertNotIn("CAUTION", rendered)
+        self.assertNotIn("POSSIBLE / NOT PROVEN", rendered)
 
         uncertainty = next(entry for entry in entries if entry.semantic_type == "UNCERTAINTY")
         _, _, _, plate_height, _ = _protected_plate_geometry(
             uncertainty, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
         )
-        self.assertGreater(plate_height, uncertainty.font_size_px * 2)
+        self.assertGreater(plate_height, uncertainty.font_size_px)
 
-    def test_uncertainty_label_is_centered_on_its_own_first_line(self):
+    def test_semantic_tag_is_not_added_to_uncertainty_text(self):
         entry = OverlayEntry(
             "U", 0, 90, "LARGE BRAIN DOES NOT PROVE TOOL USE",
             semantic_type="UNCERTAINTY", effect="PROTECTED_PLATE",
@@ -119,9 +117,26 @@ class EditorialPlannerTests(unittest.TestCase):
         )
         settings = ProjectSettings(output_width=1920, output_height=1080)
         rendered = build_ass([entry], settings)
-        self.assertIn("POSSIBLE / NOT PROVEN\\N{\\fs64", rendered)
+        self.assertNotIn("POSSIBLE / NOT PROVEN", rendered)
         self.assertIn("LARGE BRAIN DOES\\NNOT PROVE TOOL USE", rendered)
-        self.assertEqual(len(_rendered_line_widths(entry, settings)), 3)
+        self.assertEqual(len(_rendered_line_widths(entry, settings)), 2)
+
+    def test_evidence_and_warning_tags_are_not_added_to_overlay_text(self):
+        entries = [
+            OverlayEntry(
+                "E", 0, 90, "THE FINDING", semantic_type="EVIDENCE",
+                font_size_px=64, wrapped_text="THE FINDING",
+            ),
+            OverlayEntry(
+                "W", 120, 210, "WATCH THIS", semantic_type="WARNING",
+                font_size_px=64, wrapped_text="WATCH THIS",
+            ),
+        ]
+        rendered = build_ass(entries, ProjectSettings())
+        self.assertNotIn("EVIDENCE  ", rendered)
+        self.assertNotIn("CAUTION  ", rendered)
+        self.assertIn("THE FINDING", rendered)
+        self.assertIn("WATCH THIS", rendered)
 
     def test_long_srt_gap_marks_first_suitable_overlay_as_section_cue(self):
         captions = [
@@ -179,7 +194,7 @@ class EditorialPlannerTests(unittest.TestCase):
         self.assertEqual(sfx_entries[0].sfx, "SOFT_HIT")
         self.assertEqual(sfx_entries[1].sfx, "NONE")
 
-    def test_short_warning_plate_accounts_for_caution_prefix(self):
+    def test_warning_plate_uses_only_supplied_text_width(self):
         warning = OverlayEntry(
             "W", 0, 60, "DANGER", semantic_type="WARNING",
             font_size_px=64, wrapped_text="DANGER",
@@ -194,7 +209,7 @@ class EditorialPlannerTests(unittest.TestCase):
         _, _, fact_width, _, _ = _protected_plate_geometry(
             fact, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
         )
-        self.assertGreater(plate_width, fact_width)
+        self.assertEqual(plate_width, fact_width)
 
     def test_protected_plate_contains_real_screenshot_text_bounds(self):
         settings = ProjectSettings(output_width=1920, output_height=1080)

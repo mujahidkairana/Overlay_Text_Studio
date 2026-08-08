@@ -46,16 +46,6 @@ def _render_text(entry: OverlayEntry, settings: ProjectSettings) -> str:
     text = _escape_text(entry.wrapped_text or entry.text)
     accent = _ass_color(settings.accent_color)
     normal = _ass_color(settings.text_color)
-    small_size = max(18, round(entry.font_size_px * 0.48))
-    if entry.semantic_type == "EVIDENCE":
-        return f"{{\\fs{small_size}\\c{accent}}}EVIDENCE  {{\\fs{entry.font_size_px}\\c{normal}}}{text}"
-    if entry.semantic_type == "WARNING":
-        return f"{{\\fs{small_size}\\c{accent}}}CAUTION  {{\\fs{entry.font_size_px}\\c{normal}}}{text}"
-    if entry.semantic_type == "UNCERTAINTY":
-        return (
-            f"{{\\fs{small_size}\\c{accent}}}POSSIBLE / NOT PROVEN\\N"
-            f"{{\\fs{entry.font_size_px}\\c{normal}}}{text}"
-        )
     if entry.semantic_type == "SECTION":
         return text.upper()
     if entry.semantic_type == "NUMBER":
@@ -205,19 +195,7 @@ def _rendered_line_widths(
     lines = (entry.wrapped_text or entry.text).split("\\N")
     font_size = max(1, entry.font_size_px)
     widths = [_estimated_text_width(line, font_size, settings) for line in lines]
-    label_size = max(18, round(font_size * 0.48))
-    if entry.semantic_type in {"EVIDENCE", "WARNING"}:
-        label = "EVIDENCE" if entry.semantic_type == "EVIDENCE" else "CAUTION"
-        widths[0] = (
-            _estimated_text_width(label + "  ", label_size, settings)
-            + _estimated_text_width(lines[0], font_size, settings)
-        )
-    elif entry.semantic_type == "UNCERTAINTY":
-        label_width = _estimated_text_width(
-            "POSSIBLE / NOT PROVEN", label_size, settings
-        )
-        widths = [label_width, *widths]
-    elif entry.semantic_type == "NUMBER":
+    if entry.semantic_type == "NUMBER":
         match = re.search(r"\d[\d,.]*%?", lines[0])
         if match:
             number_size = round(font_size * 1.22)
