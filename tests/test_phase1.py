@@ -51,6 +51,22 @@ class SRTTests(unittest.TestCase):
 
 
 class RichOverlayAndPersistenceTests(unittest.TestCase):
+    def test_ai_template_loads_and_demonstrates_every_finite_option(self):
+        template = Path(__file__).parents[1] / "templates" / "overlay_template.csv"
+        entries, warnings = load_entries(template)
+        self.assertFalse(warnings)
+        self.assertEqual(
+            {entry.semantic_type for entry in entries},
+            {"QUESTION", "FACT", "NUMBER", "EVIDENCE", "COMPARISON", "WARNING",
+             "UNCERTAINTY", "TAKEAWAY", "SECTION"},
+        )
+        self.assertEqual({entry.priority for entry in entries}, {"LOW", "MEDIUM", "HIGH"})
+        self.assertEqual(
+            {entry.visual_action for entry in entries},
+            {"AUTO", "NONE", "PUNCH_IN", "DIM_FOCUS", "FREEZE"},
+        )
+        self.assertEqual({entry.lock_style for entry in entries}, {False, True})
+
     def test_legacy_four_column_overlay_still_loads(self):
         with tempfile.TemporaryDirectory() as temporary:
             timing = Path(temporary) / "legacy.csv"

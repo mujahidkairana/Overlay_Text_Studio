@@ -65,7 +65,11 @@ Run `CHECK_SETUP.bat` to verify Python packages, both FFmpeg tools, the ASS text
 
 ## Timing input
 
-Use the in-app **Download sample timing template** button or `templates/overlay_template.csv`.
+Use the in-app **Download complete AI-ready timing template** button or
+`templates/overlay_template.csv`. It demonstrates every supported semantic type,
+priority, visual action, style lock, emphasis, and local SFX convention. When an
+AI model is generating the timing sheet, give it both the CSV and
+`templates/AI_TEMPLATE_GUIDE.md`.
 
 | Column | Required | Example |
 | --- | --- | --- |

@@ -330,7 +330,7 @@ st.subheader("Add your content")
 st.markdown('<p class="step-note">Choose three files once. The app validates subtitle reading load, plans safe overlays, renders, and verifies automatically.</p>', unsafe_allow_html=True)
 template_path = APP_ROOT / "templates" / "overlay_template.csv"
 st.download_button(
-    "Download sample timing template",
+    "Download complete AI-ready timing template",
     data=template_path.read_bytes(),
     file_name="overlay_template.csv",
     mime="text/csv",
