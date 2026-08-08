@@ -391,6 +391,11 @@ class SetupFlowTests(unittest.TestCase):
             self.assertEqual(selected, "libx264")
             self.assertEqual(timings["libx264"], 1.25)
 
+    def test_fresh_user_encoder_default_is_automatic(self):
+        app_source = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertIn('"encoder": "auto"', app_source)
+        self.assertNotIn('"encoder": "libx264"', app_source)
+
     def test_background_worker_reports_safe_stop(self):
         with tempfile.TemporaryDirectory() as temp_string:
             temp = Path(temp_string)

@@ -87,7 +87,7 @@ def _initial_state() -> None:
         "accent_color": "#FFD84D",
         "safe_top_percent": 5.5,
         "chunk_seconds": 60,
-        "encoder": "libx264",
+        "encoder": "auto",
         "x264_preset": "veryfast",
         "crf": 18,
         "render_status_path": "",
@@ -381,7 +381,10 @@ if st.button(
             st.session_state.timing_path,
             video_duration_frames=video.duration_frames_30,
         )
-        warnings.extend(validate_srt_video_timing(captions, video.duration_frames_30))
+        srt_timing_warnings = validate_srt_video_timing(
+            captions, video.duration_frames_30
+        )
+        warnings.extend(srt_timing_warnings)
         warnings.extend(reading_load_warnings(entries, captions))
         settings = _settings_from_ui(
             Path(video.path).stem,
@@ -409,8 +412,13 @@ if st.button(
                 f":green-badge[Video ready] **{video.duration_seconds / 60:.1f} min** · "
                 f"{video.width}×{video.height}"
             )
+            srt_badge = (
+                ":orange-badge[SRT loaded — timing warning found]"
+                if srt_timing_warnings
+                else ":green-badge[SRT timing looks good]"
+            )
             st.markdown(
-                f":green-badge[SRT compatible] **{len(captions)} captions** · "
+                f"{srt_badge} **{len(captions)} captions** · "
                 f":green-badge[Overlay sheet ready] **{len(entries)} overlays**"
             )
             st.markdown(
@@ -426,12 +434,18 @@ if st.button(
 
         def automatic_plan(progress):
             progress(0.01, "Detecting and caching hard scene cuts")
+            settings.scene_analysis_available = True
+
+            def scene_warning(message: str) -> None:
+                settings.scene_analysis_available = False
+                warnings.append(message)
+
             settings.scene_cut_frames = detect_scene_cuts(
                 video.path,
                 project_dir / "cache" / "scene_cuts.json",
                 app_root=APP_ROOT,
                 fps=settings.fps,
-                warning_callback=warnings.append,
+                warning_callback=scene_warning,
             )
             frames = extract_analysis_frames(
                 video.path,

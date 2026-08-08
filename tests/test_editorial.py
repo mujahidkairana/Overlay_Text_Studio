@@ -31,6 +31,30 @@ class EditorialPlannerTests(unittest.TestCase):
         self.assertEqual(entry.visual_action, "PUNCH_IN")
         self.assertEqual(entry.action_end_frame, 75)
 
+    def test_dim_focus_is_clamped_at_hard_cut(self):
+        entry = OverlayEntry(
+            "A", 0, 120, "QUESTION?", semantic_type="QUESTION",
+            priority="MEDIUM", confidence="HIGH",
+        )
+        plan_editorial_actions([entry], ProjectSettings(scene_cut_frames=[75]))
+        self.assertEqual(entry.visual_action, "DIM_FOCUS")
+        self.assertEqual(entry.action_end_frame, 75)
+
+    def test_failed_scene_analysis_disables_strong_actions_and_low_freeze(self):
+        punch = OverlayEntry(
+            "P", 0, 90, "EVIDENCE", semantic_type="EVIDENCE",
+            priority="HIGH", confidence="HIGH",
+        )
+        low_freeze = OverlayEntry(
+            "F", 300, 390, "MINOR DETAIL", semantic_type="FACT",
+            priority="LOW", confidence="HIGH", visual_action="FREEZE",
+        )
+        plan_editorial_actions(
+            [punch, low_freeze], ProjectSettings(scene_analysis_available=False)
+        )
+        self.assertEqual(punch.visual_action, "NONE")
+        self.assertEqual(low_freeze.visual_action, "NONE")
+
     def test_report_is_variation_not_monetization_score(self):
         report = editorial_report([OverlayEntry("A", 0, 60, "FACT")], 60.0)
         self.assertEqual(report["events_per_minute"], 1.0)

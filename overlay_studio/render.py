@@ -109,8 +109,8 @@ def _post_scale_filters(
             ]
         )
     if dim_intervals:
-        active = _between_expression(dim_intervals)
-        effects.append(f"eq=brightness='-0.06*min(1\\,{active})':eval=frame")
+        eased = _eased_interval_expression(dim_intervals)
+        effects.append(f"eq=brightness='-0.06*min(1\\,{eased})':eval=frame")
     ass_filter = f"ass=filename='{_filter_path(ass_path)}'"
     if settings.font_file:
         ass_filter += f":fontsdir='{_filter_path(Path(settings.font_file).resolve().parent)}'"
@@ -666,6 +666,12 @@ def _sfx_mix_filter(events: list[tuple[Path, int]]) -> tuple[list[str], str]:
     return chains, "[aout]"
 
 
+def _final_audio_codec_args(has_sfx: bool) -> list[str]:
+    if has_sfx:
+        return ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    return ["-c:a", "copy"]
+
+
 def render_full_resumable(
     video: VideoInfo,
     entries: list[OverlayEntry],
@@ -751,32 +757,44 @@ def render_full_resumable(
             command += ["-filter_complex", ";".join(mix_chains), "-map", audio_label]
         else:
             command += ["-map", "1:a:0?"]
+        command += ["-c:v", "copy"]
+        command += _final_audio_codec_args(bool(sfx_events))
         command += [
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
             "-t",
             f"{video.duration_seconds:.9f}",
             "-movflags",
             "+faststart",
             str(temporary),
         ]
-        _run_ffmpeg(
-            command,
-            expected_seconds=video.duration_seconds,
-            progress=(
-                (lambda value, label: progress(0.96 + value * 0.035, "Restoring source audio"))
-                if progress
-                else None
-            ),
-            label="Restoring source audio",
-            cancel_check=cancel_check,
+        audio_progress = (
+            (lambda value, label: progress(0.96 + value * 0.035, "Restoring source audio"))
+            if progress
+            else None
         )
+        try:
+            _run_ffmpeg(
+                command,
+                expected_seconds=video.duration_seconds,
+                progress=audio_progress,
+                label="Restoring source audio",
+                cancel_check=cancel_check,
+            )
+        except MediaError:
+            if sfx_events:
+                raise
+            temporary.unlink(missing_ok=True)
+            fallback = list(command)
+            codec_index = fallback.index("-c:a")
+            fallback[codec_index:codec_index + 2] = [
+                "-c:a", "aac", "-b:a", "192k", "-ar", "48000"
+            ]
+            _run_ffmpeg(
+                fallback,
+                expected_seconds=video.duration_seconds,
+                progress=audio_progress,
+                label="Restoring source audio with compatible encoding",
+                cancel_check=cancel_check,
+            )
     else:
         shutil.copy2(video_only, temporary)
     verification = verify_render_output(temporary, video, settings, app_root=app_root)

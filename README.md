@@ -137,6 +137,7 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Punch-ins ease in and out over roughly 250 ms instead of snapping between zoom levels.
 - Dim/focus and optional SFX use separate spacing rules to avoid repetitive pulsing or clustered sounds.
 - Scene-cut detection uses current FFmpeg syntax and fails soft: safe overlays continue if analysis is unavailable.
+- When scene analysis fails, punch-ins and freezes are genuinely disabled; text overlays still complete safely.
 - SRT timing is checked against the selected video to catch likely file mismatches.
 - Auto resolution now preserves the source dimensions (rounded down only when an odd encoder-unsafe dimension is found).
 - Number, evidence, comparison, warning, uncertainty, takeaway, question, and
@@ -144,6 +145,10 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Punch-ins are limited to a subtle 5%; focus dimming is mild and temporary.
 - Freeze emphasis replaces frames inside the existing timeline and never adds duration.
 - Optional local SFX are mixed quietly below narration with limiter protection.
+- Without SFX, compatible source audio is stream-copied to avoid quality loss and save time;
+  incompatible MP4 audio automatically falls back to AAC.
+- DIM_FOCUS uses a short ease-in/ease-out and is clamped at scene cuts. Explicit
+  freezes are accepted only for HIGH-priority rows.
 - `editorial_plan.json` and the in-app Creative Variation Report summarize editing patterns.
 - A compact automatic pre-flight confirms video duration, caption/overlay counts,
   output resolution, encoder, free space, and optional SFX issues before analysis begins.

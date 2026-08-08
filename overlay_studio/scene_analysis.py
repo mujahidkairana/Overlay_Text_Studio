@@ -76,7 +76,7 @@ def detect_scene_cuts(
         if warning_callback is None:
             raise MediaError(detail)
         warning_callback(
-            "Scene-cut analysis was unavailable; scene-sensitive extra effects "
+            "Scene-cut analysis was unavailable; strong scene-sensitive effects "
             "were disabled and safe overlay rendering will continue. " + detail
         )
         return []
