@@ -111,7 +111,10 @@ def plan_editorial_actions(
         else:
             requested = "NONE"
 
-        if not settings.scene_analysis_available and requested in STRONG_ACTIONS:
+        if (
+            not settings.scene_analysis_available
+            and requested in STRONG_ACTIONS | MEDIUM_ACTIONS
+        ):
             requested = "NONE"
         if requested == "FREEZE" and entry.priority != "HIGH":
             requested = "NONE"

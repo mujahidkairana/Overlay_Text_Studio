@@ -137,7 +137,8 @@ burn a duplicate subtitle layer, and the lower caption-safe area remains protect
 - Punch-ins ease in and out over roughly 250 ms instead of snapping between zoom levels.
 - Dim/focus and optional SFX use separate spacing rules to avoid repetitive pulsing or clustered sounds.
 - Scene-cut detection uses current FFmpeg syntax and fails soft: safe overlays continue if analysis is unavailable.
-- When scene analysis fails, punch-ins and freezes are genuinely disabled; text overlays still complete safely.
+- When scene analysis fails, punch-ins, freezes, and dim/focus are genuinely
+  disabled; plain semantic text overlays still complete safely.
 - SRT timing is checked against the selected video to catch likely file mismatches.
 - Auto resolution now preserves the source dimensions (rounded down only when an odd encoder-unsafe dimension is found).
 - Number, evidence, comparison, warning, uncertainty, takeaway, question, and

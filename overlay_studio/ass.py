@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import math
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
+
+from PIL import ImageFont
 
 from .models import OverlayEntry, ProjectSettings
 
@@ -147,19 +150,79 @@ def _motion_tags(
     return f"\\an{alignment}{position_tag}\\fad({intro_ms},{outro_ms}){transform}"
 
 
-def _estimated_text_width(text: str, font_size: int) -> int:
-    """Estimate a semibold sans-serif line width without relying on local fonts."""
-    narrow = set(" !'.,:;Iijl|1")
-    wide = set("MW@%#QO")
-    units = 0.0
-    for character in text:
-        if character in narrow:
-            units += 0.28
-        elif character in wide:
-            units += 0.58
+@lru_cache(maxsize=128)
+def _load_measurement_font(font_file: str, font_size: int):
+    for candidate in (
+        font_file,
+        "C:/Windows/Fonts/seguisb.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "DejaVuSans-Bold.ttf",
+    ):
+        if not candidate:
+            continue
+        try:
+            return ImageFont.truetype(candidate, font_size)
+        except OSError:
+            continue
+    return None
+
+
+def _estimated_text_width(
+    text: str,
+    font_size: int,
+    settings: ProjectSettings | None = None,
+) -> int:
+    """Measure semibold text and include ASS tracking/outline breathing room."""
+    font = _load_measurement_font(settings.font_file if settings else "", font_size)
+    if font is not None:
+        left, _, right, _ = font.getbbox(text)
+        width = right - left
+    else:
+        width = round(sum(
+            0.32 if character in " !'.,:;Iijl|1" else
+            0.76 if character in "MW@%#QO" else 0.56
+            for character in text
+        ) * font_size)
+    if settings is not None:
+        tracking = max(0, round(settings.output_height / 1080.0))
+        outline = max(2, round(3.0 * settings.output_height / 1080.0))
+        shadow = max(1, round(1.5 * settings.output_height / 1080.0))
+        width += max(0, len(text) - 1) * tracking + 2 * (outline + shadow + 2)
+    return max(font_size, width)
+
+
+def _rendered_line_widths(
+    entry: OverlayEntry, settings: ProjectSettings
+) -> list[int]:
+    lines = (entry.wrapped_text or entry.text).split("\\N")
+    font_size = max(1, entry.font_size_px)
+    widths = [_estimated_text_width(line, font_size, settings) for line in lines]
+    label_size = max(18, round(font_size * 0.48))
+    if entry.semantic_type in {"EVIDENCE", "WARNING"}:
+        label = "EVIDENCE" if entry.semantic_type == "EVIDENCE" else "CAUTION"
+        widths[0] = (
+            _estimated_text_width(label + "  ", label_size, settings)
+            + _estimated_text_width(lines[0], font_size, settings)
+        )
+    elif entry.semantic_type == "UNCERTAINTY":
+        label_width = _estimated_text_width(
+            "POSSIBLE / NOT PROVEN", label_size, settings
+        )
+        if len(lines) == 1:
+            widths = [label_width, widths[0]]
         else:
-            units += 0.38
-    return max(font_size, round(units * font_size))
+            widths[0] += label_width
+    elif entry.semantic_type == "NUMBER":
+        match = re.search(r"\d[\d,.]*%?", lines[0])
+        if match:
+            number_size = round(font_size * 1.22)
+            surrounding_size = max(18, round(font_size * 0.58))
+            widths[0] = sum((
+                _estimated_text_width(lines[0][:match.start()], surrounding_size, settings),
+                _estimated_text_width(match.group(0), number_size, settings),
+                _estimated_text_width(lines[0][match.end():], surrounding_size, settings),
+            ))
+    return widths
 
 
 def _protected_plate_geometry(
@@ -174,19 +237,9 @@ def _protected_plate_geometry(
     scale = settings.output_height / 1080.0
     horizontal_padding = max(round(22 * scale), round(font_size * 0.25))
     vertical_padding = max(round(12 * scale), round(font_size * 0.15))
-    width = max(_estimated_text_width(line, font_size) for line in lines)
-    rendered_line_count = len(lines)
-    if entry.semantic_type == "UNCERTAINTY" and len(lines) == 1:
-        rendered_line_count += 1
-        label_size = max(18, round(font_size * 0.48))
-        width = max(width, _estimated_text_width("POSSIBLE / NOT PROVEN", label_size))
-    if entry.semantic_type == "WARNING" and len(lines) == 1:
-        label_size = max(18, round(font_size * 0.48))
-        width = max(
-            width,
-            _estimated_text_width("CAUTION", label_size)
-            + _estimated_text_width("  " + lines[0], font_size),
-        )
+    rendered_widths = _rendered_line_widths(entry, settings)
+    width = max(rendered_widths)
+    rendered_line_count = len(rendered_widths)
     height = round(font_size * (1.12 + max(0, rendered_line_count - 1) * 1.08))
     plate_width = width + horizontal_padding * 2
     plate_height = height + vertical_padding * 2

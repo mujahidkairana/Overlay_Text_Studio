@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from overlay_studio.ass import _protected_plate_geometry, build_ass
+from overlay_studio.ass import _protected_plate_geometry, _rendered_line_widths, build_ass
 from overlay_studio.editorial import editorial_report, plan_editorial_actions
 from overlay_studio.models import OverlayEntry, ProjectSettings
 from overlay_studio.srt import CaptionInterval
@@ -54,6 +54,16 @@ class EditorialPlannerTests(unittest.TestCase):
         )
         self.assertEqual(punch.visual_action, "NONE")
         self.assertEqual(low_freeze.visual_action, "NONE")
+
+    def test_failed_scene_analysis_also_disables_dim_focus(self):
+        dim = OverlayEntry(
+            "D", 0, 90, "WHAT HAPPENED?", semantic_type="QUESTION",
+            priority="MEDIUM", confidence="HIGH",
+        )
+        plan_editorial_actions(
+            [dim], ProjectSettings(scene_analysis_available=False)
+        )
+        self.assertEqual(dim.visual_action, "NONE")
 
     def test_report_is_variation_not_monetization_score(self):
         report = editorial_report([OverlayEntry("A", 0, 60, "FACT")], 60.0)
@@ -170,6 +180,27 @@ class EditorialPlannerTests(unittest.TestCase):
             fact, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
         )
         self.assertGreater(plate_width, fact_width)
+
+    def test_protected_plate_contains_real_screenshot_text_bounds(self):
+        settings = ProjectSettings(output_width=1920, output_height=1080)
+        entries = [
+            OverlayEntry(
+                "A", 0, 90, "LOOKS LIKE PROOF. PROVES ALMOST NOTHING.",
+                semantic_type="FACT", effect="PROTECTED_PLATE", font_size_px=77,
+                wrapped_text="LOOKS LIKE PROOF.\\NPROVES ALMOST NOTHING.",
+            ),
+            OverlayEntry(
+                "B", 120, 210, "COULD A DINOSAUR USE A TOOL?",
+                semantic_type="QUESTION", effect="PROTECTED_PLATE", font_size_px=64,
+                wrapped_text="COULD A DINOSAUR USE A TOOL?",
+            ),
+        ]
+        for entry in entries:
+            text_width = max(_rendered_line_widths(entry, settings))
+            _, _, plate_width, _, _ = _protected_plate_geometry(
+                entry, settings, 8, 960, 60
+            )
+            self.assertGreaterEqual(plate_width - text_width, entry.font_size_px // 2)
 
 
 if __name__ == "__main__":
