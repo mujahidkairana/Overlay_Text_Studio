@@ -4,11 +4,11 @@
 
 Every new working branch uses this order:
 
-    overlay-text-studio-<feature>-YYYY-MM-DD-NN
+    overlay-text-studio/<feature>/YYYY/MM/DD/NN
 
 Example:
 
-    overlay-text-studio-caption-export-2026-08-08-01
+    overlay-text-studio/caption-export/2026/08/08/01
 
 Create the next numbered branch automatically:
 
