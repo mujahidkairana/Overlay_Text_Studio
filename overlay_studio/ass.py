@@ -52,8 +52,10 @@ def _render_text(entry: OverlayEntry, settings: ProjectSettings) -> str:
     if entry.semantic_type == "WARNING":
         return f"{{\\fs{small_size}\\c{accent}}}CAUTION  {{\\fs{entry.font_size_px}\\c{normal}}}{text}"
     if entry.semantic_type == "UNCERTAINTY":
-        separator = "\\N" if "\\N" not in text else "  "
-        return f"{{\\fs{small_size}\\c{accent}}}POSSIBLE / NOT PROVEN{separator}{{\\fs{entry.font_size_px}\\c{normal}}}{text}"
+        return (
+            f"{{\\fs{small_size}\\c{accent}}}POSSIBLE / NOT PROVEN\\N"
+            f"{{\\fs{entry.font_size_px}\\c{normal}}}{text}"
+        )
     if entry.semantic_type == "SECTION":
         return text.upper()
     if entry.semantic_type == "NUMBER":
@@ -214,10 +216,7 @@ def _rendered_line_widths(
         label_width = _estimated_text_width(
             "POSSIBLE / NOT PROVEN", label_size, settings
         )
-        if len(lines) == 1:
-            widths = [label_width, widths[0]]
-        else:
-            widths[0] += label_width
+        widths = [label_width, *widths]
     elif entry.semantic_type == "NUMBER":
         match = re.search(r"\d[\d,.]*%?", lines[0])
         if match:

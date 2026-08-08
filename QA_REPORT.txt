@@ -10,7 +10,7 @@ IMPLEMENTED PHASES
 - Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
 AUTOMATED AND RENDER VALIDATION
-- Full 75-test unittest suite passes on the bundled Windows runtime.
+- Full 76-test unittest suite passes on the bundled Windows runtime.
 - Headless Streamlit startup completes with zero UI exceptions.
 - Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
 - Scene analysis uses `-fps_mode vfr`; a simulated analysis failure continues safely with a warning.
@@ -52,6 +52,8 @@ EDITORIAL / VIEWER ACCEPTANCE
   rounded-plate coverage, contrast, consistency, and caption-safe placement.
 - Protected plates use real font metrics plus tracking, outline, shadow, and
   semantic-label widths; screenshot-derived long text stays inside the plate.
+- UNCERTAINTY labels render centered on a dedicated first line, with supplied
+  sheet text beginning cleanly underneath and geometry covering every line.
 - Punch-in ramps are smooth, DIM_FOCUS and SFX have separate cooldowns, short
   WARNING plates include the CAUTION label width, and auto output matches source resolution.
 - DIM_FOCUS eases in/out and stops at scene cuts; FREEZE requires HIGH priority.
