@@ -351,6 +351,15 @@ class SetupFlowTests(unittest.TestCase):
         self.assertIn("OverlayTextStudio\\Shared_Components", script)
         self.assertNotIn("D:\\MUZ\\", script)
 
+    def test_branch_helper_uses_repository_wide_daily_sequence(self):
+        helper = (ROOT / "scripts" / "new_branch.ps1").read_text(encoding="utf-8")
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        self.assertIn('"/[^/]+/"', helper)
+        self.assertIn("$largest + 1", helper)
+        self.assertIn("Branch already exists locally or on origin", helper)
+        self.assertIn("[int]$Sequence = 0", helper)
+        self.assertIn("repository-wide", contributing)
+
     def test_versioned_shared_ffmpeg_layout_is_supported(self):
         media = (ROOT / "overlay_studio" / "media.py").read_text(encoding="utf-8")
         self.assertIn('glob(f"*/bin/{executable}")', media)

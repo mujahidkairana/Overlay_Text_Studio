@@ -1,7 +1,10 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string]$Feature
+    [string]$Feature,
+
+    [ValidateRange(1, 99)]
+    [int]$Sequence = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,16 +30,27 @@ $prefix = "$repositorySlug/$featureSlug/$date"
 
 & git fetch --prune origin 2>$null
 $branches = & git for-each-ref --format="%(refname:short)" refs/heads refs/remotes/origin
-$pattern = "^" + [regex]::Escape($prefix) + "/(\d+)$"
+$dailyPattern = (
+    "^" + [regex]::Escape($repositorySlug) +
+    "/[^/]+/" + [regex]::Escape($date) + "/(\d+)$"
+)
 $largest = 0
 foreach ($branch in $branches) {
     $name = $branch -replace "^origin/", ""
-    if ($name -match $pattern) {
+    if ($name -match $dailyPattern) {
         $largest = [Math]::Max($largest, [int]$Matches[1])
     }
 }
 
-$branchName = "{0}/{1:D2}" -f $prefix, ($largest + 1)
+$nextSequence = if ($Sequence -gt 0) { $Sequence } else { $largest + 1 }
+$branchName = "{0}/{1:D2}" -f $prefix, $nextSequence
+$collision = $branches | Where-Object {
+    ($_ -replace "^origin/", "") -eq $branchName
+}
+if ($collision) {
+    throw "Branch already exists locally or on origin: $branchName"
+}
+
 & git switch -c $branchName
 if ($LASTEXITCODE -ne 0) {
     throw "Git could not create branch $branchName."
