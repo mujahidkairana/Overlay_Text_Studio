@@ -154,8 +154,8 @@ class PlanningTests(unittest.TestCase):
 
     def test_plate_width_estimate_stays_snug_for_youtube_heading(self):
         width = _estimated_text_width("LOOKS LIKE PROOF?", 77)
-        self.assertGreaterEqual(width, 680)
-        self.assertLessEqual(width, 760)
+        self.assertGreaterEqual(width, 500)
+        self.assertLessEqual(width, 560)
 
     def test_overlapping_entries_choose_different_positions(self):
         with tempfile.TemporaryDirectory() as temp_string:

@@ -101,12 +101,27 @@ class EditorialPlannerTests(unittest.TestCase):
         self.assertIn("EVIDENCE", rendered)
         self.assertIn("CAUTION", rendered)
         self.assertIn("POSSIBLE / NOT PROVEN", rendered)
+        self.assertIn("POSSIBLE / NOT PROVEN\\N{\\fs64", rendered)
 
         uncertainty = next(entry for entry in entries if entry.semantic_type == "UNCERTAINTY")
         _, _, _, plate_height, _ = _protected_plate_geometry(
             uncertainty, ProjectSettings(output_width=1920, output_height=1080), 8, 960, 60
         )
         self.assertGreater(plate_height, uncertainty.font_size_px * 2)
+
+    def test_uncertainty_label_is_centered_on_its_own_first_line(self):
+        entry = OverlayEntry(
+            "U", 0, 90, "LARGE BRAIN DOES NOT PROVE TOOL USE",
+            semantic_type="UNCERTAINTY", effect="PROTECTED_PLATE",
+            resolved_position="TOP_CENTER", font_size_px=64,
+            wrapped_text="LARGE BRAIN DOES\\NNOT PROVE TOOL USE",
+            animation="FADE_ONLY",
+        )
+        settings = ProjectSettings(output_width=1920, output_height=1080)
+        rendered = build_ass([entry], settings)
+        self.assertIn("POSSIBLE / NOT PROVEN\\N{\\fs64", rendered)
+        self.assertIn("LARGE BRAIN DOES\\NNOT PROVE TOOL USE", rendered)
+        self.assertEqual(len(_rendered_line_widths(entry, settings)), 3)
 
     def test_long_srt_gap_marks_first_suitable_overlay_as_section_cue(self):
         captions = [
@@ -201,6 +216,7 @@ class EditorialPlannerTests(unittest.TestCase):
                 entry, settings, 8, 960, 60
             )
             self.assertGreaterEqual(plate_width - text_width, entry.font_size_px // 2)
+            self.assertLessEqual(plate_width, round(text_width * 1.14))
 
 
 if __name__ == "__main__":
