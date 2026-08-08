@@ -162,7 +162,9 @@ def plan_layout_and_styles(
         else:
             entry.reading_status = "TOO_FAST"
 
-        if entry.effect == "AUTO" or not entry.lock_style:
+        if entry.accent_word and entry.effect in {"AUTO", "CLEAN_SHADOW", "ACCENT_WORD"}:
+            entry.effect = "ACCENT_WORD"
+        elif entry.effect == "AUTO" or not entry.lock_style:
             # YouTube Pro keeps one coherent visual language. Accent is used
             # sparingly; glow is deliberately excluded because it softens edges.
             entry.effect = "ACCENT_WORD" if rng.random() < 0.20 else "CLEAN_SHADOW"
@@ -170,7 +172,10 @@ def plan_layout_and_styles(
             entry.effect = "PROTECTED_PLATE"
         elif entry.reading_status == "FAST" and entry.effect == "ACCENT_WORD":
             entry.effect = "CLEAN_SHADOW"
-        entry.accent_word = choose_accent_word(entry.text) if entry.effect == "ACCENT_WORD" else ""
+        if entry.effect == "ACCENT_WORD" and not entry.accent_word:
+            entry.accent_word = choose_accent_word(entry.text)
+        elif entry.effect != "ACCENT_WORD" and not entry.lock_style:
+            entry.accent_word = ""
         if entry.reading_status != "COMFORTABLE":
             entry.note = (
                 entry.note

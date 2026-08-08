@@ -17,6 +17,7 @@ def save_project(
     timing_path: str,
     entries: Iterable[OverlayEntry],
     settings: ProjectSettings,
+    srt_path: str = "",
 ) -> dict[str, Path]:
     destination = Path(project_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -37,6 +38,7 @@ def save_project(
             "codec_name": video.codec_name,
         },
         "timing_path": str(Path(timing_path).resolve()),
+        "srt_path": str(Path(srt_path).resolve()) if srt_path else "",
         "settings": settings.to_dict(),
         "entries": [entry.to_dict() for entry in entry_list],
     }
@@ -65,11 +67,18 @@ def save_project(
 
 
 def load_project(path: str | Path) -> tuple[VideoInfo, str, list[OverlayEntry], ProjectSettings]:
+    video, timing_path, _, entries, settings = load_project_data(path)
+    return video, timing_path, entries, settings
+
+
+def load_project_data(
+    path: str | Path,
+) -> tuple[VideoInfo, str, str, list[OverlayEntry], ProjectSettings]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     video = VideoInfo(**payload["video"])
     settings = ProjectSettings.from_dict(payload["settings"])
     entries = [OverlayEntry.from_dict(value) for value in payload["entries"]]
-    return video, payload["timing_path"], entries, settings
+    return video, payload.get("timing_path", ""), payload.get("srt_path", ""), entries, settings
 
 
 def apply_edited_table(entries: list[OverlayEntry], table: pd.DataFrame) -> list[OverlayEntry]:
@@ -97,5 +106,14 @@ def apply_edited_table(entries: list[OverlayEntry], table: pd.DataFrame) -> list
             entry.animation = animation
         if effect:
             entry.effect = effect
-        entry.lock_style = bool(row.get("LOCK_STYLE", entry.lock_style))
+        entry.semantic_type = str(row.get("TYPE", entry.semantic_type)).strip().upper()
+        entry.priority = str(row.get("PRIORITY", entry.priority)).strip().upper()
+        entry.accent_word = str(row.get("EMPHASIS_WORD", entry.accent_word)).strip()
+        entry.visual_action = str(
+            row.get("VISUAL_ACTION", entry.visual_action)
+        ).strip().upper()
+        entry.sfx = str(row.get("SFX", entry.sfx)).strip().upper()
+        entry.lock_style = str(row.get("LOCK_STYLE", entry.lock_style)).strip().upper() in {
+            "TRUE", "YES", "Y", "1"
+        }
     return entries

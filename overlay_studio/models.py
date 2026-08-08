@@ -14,6 +14,12 @@ ANIMATIONS = (
     "FADE_ONLY",
 )
 EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "PROTECTED_PLATE", "STRONG_OUTLINE")
+SEMANTIC_TYPES = (
+    "QUESTION", "FACT", "NUMBER", "EVIDENCE", "COMPARISON",
+    "WARNING", "UNCERTAINTY", "TAKEAWAY", "SECTION",
+)
+PRIORITIES = ("LOW", "MEDIUM", "HIGH")
+VISUAL_ACTIONS = ("AUTO", "NONE", "PUNCH_IN", "DIM_FOCUS", "FREEZE")
 
 
 @dataclass(slots=True)
@@ -49,6 +55,10 @@ class OverlayEntry:
     note: str = ""
     lock_style: bool = False
     accent_word: str = ""
+    semantic_type: str = "FACT"
+    priority: str = "MEDIUM"
+    visual_action: str = "AUTO"
+    sfx: str = "NONE"
     reading_cps: float = 0.0
     reading_status: str = "NOT_CHECKED"
 

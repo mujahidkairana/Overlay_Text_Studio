@@ -1,4 +1,4 @@
-# Overlay Text Studio v2.3
+# Overlay Text Studio v3.0
 
 ## Development branches
 
@@ -45,7 +45,7 @@ Overlay Text Studio is a local Windows app for polished animated text overlays o
 2. Double-click `SETUP_ONCE.bat`.
 3. Choose a drive/folder for `Shared_Components` when asked. No administrator permission is required.
 4. When setup finishes, double-click `START_APP.bat`.
-5. In the app, download the sample timing template or select your own CSV/XLSX.
+5. Select the final video, its SRT subtitles, and an overlay CSV/XLSX.
 
 Normal use is fully offline after setup. Keep `Shared_Components` available because the app runtime and FFmpeg may be stored there.
 
@@ -74,17 +74,35 @@ Use the in-app **Download sample timing template** button or `templates/overlay_
 | `END_TIME_30FPS` | Yes | `00:01:16.20` |
 | `ON_SCREEN_TEXT` | Yes | `THE CLUE WAS HIDDEN` |
 
+Legacy four-column files remain supported. These optional columns add explicit
+editorial intent without requiring any cloud service:
+
+| Optional column | Default | Example |
+| --- | --- | --- |
+| `TYPE` | Deterministic `QUESTION`/`NUMBER`/`FACT` classification | `EVIDENCE` |
+| `PRIORITY` | `MEDIUM` | `HIGH` |
+| `EMPHASIS_WORD` | Existing local accent heuristic | `WATER` |
+| `VISUAL_ACTION` | `AUTO` | `PUNCH_IN` |
+| `SFX` | `NONE` | `SOFT_HIT` |
+| `LOCK_STYLE` | `FALSE` | `TRUE` |
+
+`VISUAL_ACTION` and `SFX` are persisted for later editorial phases; Phase 1
+does not render those treatments yet.
+
 Start is inclusive and end is exclusive. Frame fields must be `00–29`. Integer frame numbers are also accepted. Explicit `\N` or spreadsheet line breaks are allowed for a maximum of two lines; a third line is rejected with a clear row error instead of being silently removed.
 
 ## Recommended workflow
 
-1. Select the source video and timing sheet.
-2. Click **Create final YouTube video automatically**. Validation, native
+1. Select the final video, SRT subtitles, and overlay timing sheet.
+2. Click **AUTO ENHANCE VIDEO**. Validation, subtitle reading-load checks, native
    resolution selection, sizing, parallel safe placement, professional styling,
    rendering, and verification run without intermediate questions.
 3. Optional manual review and preview controls remain available after completion.
 
 Use **Continue an existing project** and select its `project.json` to resume later. The saved random seed and styles are restored, so unchanged chunks remain reusable. If a render is stopped, start the same export again to reuse completed chunks.
+
+SRT is used only for timing/context and reading-load warnings. The app does not
+burn a duplicate subtitle layer, and the lower caption-safe area remains protected.
 
 ## Visual rules
 
