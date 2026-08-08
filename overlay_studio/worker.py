@@ -3,22 +3,44 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import threading
 import time
+import uuid
 from pathlib import Path
 
 from .project import load_project
 from .render import RenderCancelled, render_full_resumable
 
 
-def _write_status(path: Path, **values: object) -> None:
+def _write_status(path: Path, *, strict: bool = True, **values: object) -> bool:
     payload = {
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         **values,
     }
-    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary = path.with_name(
+        f"{path.name}.tmp.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}"
+    )
     temporary.parent.mkdir(parents=True, exist_ok=True)
-    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    try:
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        for attempt in range(40):
+            try:
+                os.replace(temporary, path)
+                return True
+            except OSError as exc:
+                retryable = isinstance(exc, PermissionError) or getattr(
+                    exc, "winerror", None
+                ) in {5, 32}
+                if not retryable or attempt == 39:
+                    if strict:
+                        raise
+                    return False
+                time.sleep(min(0.025 * (attempt + 1), 0.2))
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def run(project_path: Path, output: Path, status: Path, stop: Path) -> int:
@@ -36,6 +58,7 @@ def run(project_path: Path, output: Path, status: Path, stop: Path) -> int:
     def progress(value: float, label: str) -> None:
         _write_status(
             status,
+            strict=False,
             state="running",
             progress=max(0.0, min(1.0, float(value))),
             label=label,

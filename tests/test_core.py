@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -26,6 +27,7 @@ from overlay_studio.timing import (
     timecode_to_frame,
 )
 import start_overlay
+from overlay_studio import worker
 from overlay_studio.worker import run as run_worker
 
 
@@ -362,6 +364,47 @@ class SetupFlowTests(unittest.TestCase):
             payload = __import__("json").loads(status.read_text(encoding="utf-8"))
             self.assertEqual(result, 2)
             self.assertEqual(payload["state"], "stopped")
+
+    def test_status_write_retries_transient_windows_access_denied(self):
+        with tempfile.TemporaryDirectory() as temp_string:
+            status = Path(temp_string) / "render_status.json"
+            real_replace = __import__("os").replace
+            attempts = 0
+
+            def temporarily_locked(source, destination):
+                nonlocal attempts
+                attempts += 1
+                if attempts < 3:
+                    error = PermissionError("temporarily locked")
+                    error.winerror = 5
+                    raise error
+                return real_replace(source, destination)
+
+            with patch.object(worker.os, "replace", side_effect=temporarily_locked):
+                written = worker._write_status(status, state="running")
+
+            self.assertTrue(written)
+            self.assertEqual(attempts, 3)
+            self.assertEqual(
+                __import__("json").loads(status.read_text(encoding="utf-8"))["state"],
+                "running",
+            )
+            self.assertEqual(list(status.parent.glob("render_status.json.tmp.*")), [])
+
+    def test_noncritical_status_write_does_not_abort_after_lock_timeout(self):
+        with tempfile.TemporaryDirectory() as temp_string:
+            status = Path(temp_string) / "render_status.json"
+            error = PermissionError("still locked")
+            error.winerror = 5
+            with patch.object(worker.os, "replace", side_effect=error), patch.object(
+                worker.time, "sleep"
+            ):
+                written = worker._write_status(
+                    status, strict=False, state="running"
+                )
+
+            self.assertFalse(written)
+            self.assertEqual(list(status.parent.glob("render_status.json.tmp.*")), [])
 
     def test_shared_setup_has_installed_cached_download_precedence(self):
         script = (ROOT / "shared_setup.ps1").read_text(encoding="utf-8")
