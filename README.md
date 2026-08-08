@@ -1,5 +1,22 @@
 # Overlay Text Studio v2.1
 
+## Development branches
+
+Every new working branch uses this order:
+
+    overlay-text-studio-<feature>-YYYY-MM-DD-NN
+
+Example:
+
+    overlay-text-studio-caption-export-2026-08-08-01
+
+Create the next numbered branch automatically:
+
+    .\scripts\new_branch.ps1 -Feature "caption export"
+
+See CONTRIBUTING.md for the complete rules. GitHub checks this format on every
+pull request.
+
 ## Portable GitHub checkout
 
 Clone this repository to any normal folder on a Windows laptop, double-click
