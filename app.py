@@ -12,10 +12,19 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from overlay_studio.editorial import editorial_report, plan_editorial_actions, write_editorial_report
 from overlay_studio.layout import balanced_wrap, calculate_font_size, plan_layout_and_styles, prepare_text_layout
 from overlay_studio.media import MediaError, extract_analysis_frames, probe_video
-from overlay_studio.models import ANIMATIONS, EFFECTS, POSITIONS, ProjectSettings
-from overlay_studio.project import apply_edited_table, load_project, save_project
+from overlay_studio.models import (
+    ANIMATIONS,
+    EFFECTS,
+    POSITIONS,
+    PRIORITIES,
+    SEMANTIC_TYPES,
+    VISUAL_ACTIONS,
+    ProjectSettings,
+)
+from overlay_studio.project import apply_edited_table, load_project_data, save_project
 from overlay_studio.render import (
     RenderCancelled,
     ensure_free_space,
@@ -23,8 +32,11 @@ from overlay_studio.render import (
     render_clip,
     render_full_resumable,
     select_fast_encoder,
+    validate_sfx_assets,
 )
 from overlay_studio.safety import analyze_entries
+from overlay_studio.scene_analysis import detect_scene_cuts
+from overlay_studio.srt import SRTValidationError, load_srt, reading_load_warnings
 from overlay_studio.timing import TimingValidationError, entries_to_table, load_entries
 
 
@@ -50,6 +62,7 @@ def _initial_state() -> None:
     defaults = {
         "video_path": "",
         "timing_path": "",
+        "srt_path": "",
         "output_root": str((Path.home() / "Videos" / "OverlayTextStudio").resolve()),
         "video_info": None,
         "entries": None,
@@ -72,6 +85,9 @@ def _initial_state() -> None:
         "x264_preset": "veryfast",
         "crf": 18,
         "render_status_path": "",
+        "density_preset": "STANDARD",
+        "editorial_report": None,
+        "sfx_folder": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -131,6 +147,9 @@ def _path_row(label: str, key: str, types: list[tuple[str, str]] | None = None) 
                 elif key == "timing_path":
                     st.session_state.entries = None
                     st.session_state.edited_table = None
+                elif key == "srt_path":
+                    st.session_state.entries = None
+                    st.session_state.edited_table = None
                 st.rerun()
 
     with text_col:
@@ -166,6 +185,8 @@ def _settings_from_ui(
         crf=int(st.session_state.get("crf", 18)),
         style_preset="YOUTUBE_PRO",
         parallel_analysis_workers=min(4, max(1, (os.cpu_count() or 2) // 2)),
+        density_preset=st.session_state.get("density_preset", "STANDARD"),
+        sfx_folder=st.session_state.get("sfx_folder", ""),
     )
 
 
@@ -208,11 +229,12 @@ def _open_project(path_text: str) -> None:
     path = Path(path_text).expanduser().resolve()
     if not path.is_file() or path.name.lower() != "project.json":
         raise ValueError("Choose a valid Overlay Text Studio project.json file.")
-    video, timing_path, entries, settings = load_project(path)
+    video, timing_path, srt_path, entries, settings = load_project_data(path)
     if not Path(video.path).is_file():
         raise ValueError(f"The saved source video is no longer at: {video.path}")
     st.session_state.video_path = video.path
     st.session_state.timing_path = timing_path
+    st.session_state.srt_path = srt_path
     st.session_state.output_root = str(path.parent.parent)
     st.session_state.project_name = settings.project_name
     st.session_state.video_info = video
@@ -231,6 +253,12 @@ def _open_project(path_text: str) -> None:
     st.session_state.encoder = settings.encoder
     st.session_state.x264_preset = settings.x264_preset
     st.session_state.crf = settings.crf
+    st.session_state.density_preset = settings.density_preset
+    st.session_state.sfx_folder = settings.sfx_folder
+    report_path = path.parent / "editorial_plan.json"
+    st.session_state.editorial_report = (
+        json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
+    )
 
 
 _initial_state()
@@ -238,7 +266,7 @@ _initial_state()
 st.title("Overlay Text Studio")
 st.caption("Offline animated overlays for 30‑fps YouTube long videos · exact timing · safe top placement · resumable export")
 st.markdown(
-    '<div class="safe-note">Recommended YouTube Pro settings are already selected. Add the two files and the app analyzes, styles, renders, and verifies the final video without intermediate questions.</div>',
+    '<div class="safe-note">Recommended settings are already selected. Add the final video, SRT subtitles, and overlay sheet, then click AUTO ENHANCE VIDEO. Everything else is automatic and offline.</div>',
     unsafe_allow_html=True,
 )
 
@@ -290,26 +318,37 @@ with st.sidebar:
         st.selectbox("CPU speed", ["veryfast", "faster", "fast", "medium"], index=None, key="x264_preset")
         st.slider("Quality (lower is better)", min_value=16, max_value=24, key="crf")
         st.slider("Resume chunk length", min_value=30, max_value=120, step=15, key="chunk_seconds")
+        st.selectbox(
+            "Editorial density",
+            ["CALM", "STANDARD", "ENERGETIC"],
+            index=None,
+            key="density_preset",
+            format_func=lambda value: value.title(),
+        )
 
 st.subheader("Add your content")
-st.markdown('<p class="step-note">Choose the video and timing sheet. Placement, size, animation, contrast protection, caption clearance, and output settings are automatic.</p>', unsafe_allow_html=True)
+st.markdown('<p class="step-note">Choose three files once. The app validates subtitle reading load, plans safe overlays, renders, and verifies automatically.</p>', unsafe_allow_html=True)
 template_path = APP_ROOT / "templates" / "overlay_template.csv"
 st.download_button(
-    "Download sample timing template",
+    "Download complete AI-ready timing template",
     data=template_path.read_bytes(),
     file_name="overlay_template.csv",
     mime="text/csv",
 )
 _path_row("Source video", "video_path", [("Video", "*.mp4 *.mov *.mkv *.m4v"), ("All files", "*.*")])
+_path_row("Subtitle SRT", "srt_path", [("Subtitles", "*.srt"), ("All files", "*.*")])
 _path_row("Overlay timing CSV/XLSX", "timing_path", [("Timing sheet", "*.csv *.xlsx *.xlsm"), ("All files", "*.*")])
 with st.expander("Optional output location"):
     _path_row("Project and output folder", "output_root", None)
+    _path_row("Licensed local SFX folder", "sfx_folder", None)
 
 files_ready = bool(
-    st.session_state.video_path.strip() and st.session_state.timing_path.strip()
+    st.session_state.video_path.strip()
+    and st.session_state.srt_path.strip()
+    and st.session_state.timing_path.strip()
 )
 if st.button(
-    "Create final YouTube video automatically",
+    "AUTO ENHANCE VIDEO",
     type="primary",
     width="stretch",
     disabled=not files_ready,
@@ -319,11 +358,15 @@ if st.button(
             raise MediaError("Choose a source video first.")
         if not st.session_state.timing_path.strip():
             raise TimingValidationError("Choose an overlay timing CSV/XLSX file first.")
+        if not st.session_state.srt_path.strip():
+            raise SRTValidationError("Choose an SRT subtitle file first.")
         video = probe_video(st.session_state.video_path, APP_ROOT)
+        captions = load_srt(st.session_state.srt_path)
         entries, warnings = load_entries(
             st.session_state.timing_path,
             video_duration_frames=video.duration_frames_30,
         )
+        warnings.extend(reading_load_warnings(entries, captions))
         settings = _settings_from_ui(
             Path(video.path).stem,
             source_width=video.width,
@@ -344,6 +387,13 @@ if st.button(
         prepare_text_layout(entries, settings)
 
         def automatic_plan(progress):
+            progress(0.01, "Detecting and caching hard scene cuts")
+            settings.scene_cut_frames = detect_scene_cuts(
+                video.path,
+                project_dir / "cache" / "scene_cuts.json",
+                app_root=APP_ROOT,
+                fps=settings.fps,
+            )
             frames = extract_analysis_frames(
                 video.path,
                 project_dir / "cache" / "analysis_frames",
@@ -360,6 +410,14 @@ if st.button(
                 max_workers=settings.parallel_analysis_workers,
             )
             plan_layout_and_styles(entries, settings, reroll=st.session_state.reroll)
+            plan_editorial_actions(entries, settings, captions=captions)
+            warnings.extend(validate_sfx_assets(entries, settings, project_dir, APP_ROOT))
+            st.session_state.editorial_report = editorial_report(
+                entries, video.duration_seconds
+            )
+            write_editorial_report(
+                project_dir / "editorial_plan.json", entries, video.duration_seconds
+            )
             return frames
 
         _run_progress(automatic_plan)
@@ -375,6 +433,7 @@ if st.button(
             timing_path=st.session_state.timing_path,
             entries=entries,
             settings=settings,
+            srt_path=st.session_state.srt_path,
         )
         output_path = _next_output_path(
             st.session_state.output_root, Path(video.path).stem
@@ -428,7 +487,7 @@ if st.button(
             )
         st.session_state.render_status_path = str(status_file)
         st.success("Background render started. You can safely leave this page open.")
-    except (TimingValidationError, MediaError, OSError, ValueError) as exc:
+    except (TimingValidationError, SRTValidationError, MediaError, OSError, ValueError) as exc:
         st.error(str(exc))
 
 if st.session_state.video_info is not None:
@@ -442,6 +501,20 @@ if st.session_state.video_info is not None:
         st.warning("The timing sheet is 30 fps; export will be normalized to constant 30 fps.")
     for warning in st.session_state.warnings:
         st.warning(warning)
+    report = st.session_state.get("editorial_report")
+    if report:
+        with st.expander("Creative Variation Report", expanded=False):
+            r1, r2, r3, r4 = st.columns(4)
+            r1.metric("Events/min", report.get("events_per_minute", 0))
+            r2.metric("Punch-ins", report.get("punch_in_count", 0))
+            r3.metric("Freezes", report.get("freeze_count", 0))
+            r4.metric("Longest quiet gap", f"{report.get('longest_quiet_interval_seconds', 0):g}s")
+            st.caption("Local editing-pattern report only; this is not a monetization score.")
+            if report.get("density_status") == "OVER_TARGET":
+                st.warning(
+                    "The supplied overlay timing exceeds the recommended 4-7 events/minute in at least one interval. Extra strong effects were suppressed; source overlay rows were preserved."
+                )
+            st.json(report, expanded=False)
 
 @st.fragment(run_every=2)
 def _render_monitor() -> None:
@@ -502,6 +575,11 @@ if st.session_state.edited_table is not None and st.checkbox(
             "POSITION": st.column_config.SelectboxColumn("POSITION", options=list(POSITIONS)),
             "ANIMATION": st.column_config.SelectboxColumn("ANIMATION", options=list(ANIMATIONS)),
             "EFFECT": st.column_config.SelectboxColumn("EFFECT", options=list(EFFECTS)),
+            "TYPE": st.column_config.SelectboxColumn("TYPE", options=list(SEMANTIC_TYPES)),
+            "PRIORITY": st.column_config.SelectboxColumn("PRIORITY", options=list(PRIORITIES)),
+            "VISUAL_ACTION": st.column_config.SelectboxColumn(
+                "VISUAL_ACTION", options=list(VISUAL_ACTIONS)
+            ),
             "SAFETY_SCORE": st.column_config.NumberColumn("SAFETY_SCORE", disabled=True, format="%.1f"),
             "CONFIDENCE": st.column_config.TextColumn("CONFIDENCE", disabled=True),
             "NOTE": st.column_config.TextColumn("NOTE", disabled=True),
@@ -526,6 +604,7 @@ if st.session_state.edited_table is not None and st.checkbox(
                     timing_path=st.session_state.timing_path,
                     entries=entries,
                     settings=st.session_state.settings,
+                    srt_path=st.session_state.srt_path,
                 )
                 st.success("Changes applied and saved.")
             except (TimingValidationError, OSError, ValueError) as exc:
@@ -632,6 +711,7 @@ if st.session_state.edited_table is not None and st.checkbox(
                 timing_path=st.session_state.timing_path,
                 entries=entries,
                 settings=settings,
+                srt_path=st.session_state.srt_path,
             )
 
             def do_full(progress):

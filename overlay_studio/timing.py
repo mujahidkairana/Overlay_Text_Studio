@@ -7,7 +7,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from .models import OverlayEntry
+from .models import OverlayEntry, PRIORITIES, SEMANTIC_TYPES, VISUAL_ACTIONS
 
 
 FPS = 30
@@ -18,6 +18,12 @@ COLUMN_ALIASES = {
     "start": {"START_TIME_30FPS", "START_30FPS", "START_TIME", "START"},
     "end": {"END_TIME_30FPS", "END_30FPS", "END_TIME", "END"},
     "text": {"ON_SCREEN_TEXT", "OVERLAY_TEXT", "TEXT", "SCREEN_TEXT"},
+    "semantic_type": {"TYPE", "SEMANTIC_TYPE"},
+    "priority": {"PRIORITY"},
+    "accent_word": {"EMPHASIS_WORD", "ACCENT_WORD"},
+    "visual_action": {"VISUAL_ACTION"},
+    "sfx": {"SFX", "SOUND_EFFECT"},
+    "lock_style": {"LOCK_STYLE"},
 }
 
 
@@ -99,6 +105,41 @@ def resolve_columns(columns: Iterable[object]) -> dict[str, str]:
     return resolved
 
 
+def _optional_text(row: pd.Series, columns: dict[str, str], role: str, default: str) -> str:
+    if role not in columns:
+        return default
+    value = str(row[columns[role]]).strip()
+    return value if value else default
+
+
+def _parse_bool(value: object, *, context: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().upper()
+    if not normalized:
+        return False
+    if normalized in {"TRUE", "YES", "Y", "1"}:
+        return True
+    if normalized in {"FALSE", "NO", "N", "0"}:
+        return False
+    raise TimingValidationError(f"{context}: use TRUE or FALSE.")
+
+
+def classify_overlay_type(text: str, requested: str = "AUTO") -> str:
+    normalized = requested.strip().upper() or "AUTO"
+    if normalized != "AUTO":
+        if normalized not in SEMANTIC_TYPES:
+            raise TimingValidationError(
+                f"TYPE '{requested}' is invalid; use AUTO or one of {', '.join(SEMANTIC_TYPES)}."
+            )
+        return normalized
+    if text.rstrip().endswith("?"):
+        return "QUESTION"
+    if re.search(r"(?:^|\s)(?:\d[\d,.]*|\d+(?:\.\d+)?%)(?:\s|$)", text):
+        return "NUMBER"
+    return "FACT"
+
+
 def read_timing_table(path: str | Path) -> pd.DataFrame:
     if not str(path).strip():
         raise TimingValidationError("Choose an overlay timing CSV/XLSX file first.")
@@ -155,7 +196,39 @@ def load_entries(
             warnings.append(
                 f"{scene_id}: visible for under 0.5 seconds; animation will be reduced."
             )
-        entries.append(OverlayEntry(scene_id=scene_id, start_frame=start, end_frame=end, text=raw_text))
+        semantic_type = classify_overlay_type(
+            raw_text, _optional_text(row, columns, "semantic_type", "AUTO")
+        )
+        priority = _optional_text(row, columns, "priority", "MEDIUM").upper()
+        if priority not in PRIORITIES:
+            raise TimingValidationError(
+                f"Row {excel_row} ({scene_id}): PRIORITY must be {', '.join(PRIORITIES)}."
+            )
+        visual_action = _optional_text(row, columns, "visual_action", "AUTO").upper()
+        if visual_action not in VISUAL_ACTIONS:
+            raise TimingValidationError(
+                f"Row {excel_row} ({scene_id}): VISUAL_ACTION must be {', '.join(VISUAL_ACTIONS)}."
+            )
+        accent_word = _optional_text(row, columns, "accent_word", "")
+        sfx = _optional_text(row, columns, "sfx", "NONE").upper()
+        lock_style = _parse_bool(
+            row[columns["lock_style"]] if "lock_style" in columns else False,
+            context=f"Row {excel_row} ({scene_id}) LOCK_STYLE",
+        )
+        entries.append(
+            OverlayEntry(
+                scene_id=scene_id,
+                start_frame=start,
+                end_frame=end,
+                text=raw_text,
+                semantic_type=semantic_type,
+                priority=priority,
+                accent_word=accent_word,
+                visual_action=visual_action,
+                sfx=sfx,
+                lock_style=lock_style,
+            )
+        )
 
     entries.sort(key=lambda item: (item.start_frame, item.end_frame, item.scene_id))
     if not entries:
@@ -184,11 +257,25 @@ def entries_to_table(entries: Iterable[OverlayEntry]) -> pd.DataFrame:
                 "START_TIME_30FPS": frame_to_timecode(item.start_frame),
                 "END_TIME_30FPS": frame_to_timecode(item.end_frame),
                 "ON_SCREEN_TEXT": item.text,
+                "TYPE": item.semantic_type,
+                "PRIORITY": item.priority,
+                "EMPHASIS_WORD": item.accent_word,
+                "VISUAL_ACTION": item.visual_action,
+                "SFX": item.sfx,
                 "POSITION": item.resolved_position,
                 "FONT_SIZE_PX": item.font_size_px,
                 "ANIMATION": item.animation,
                 "EFFECT": item.effect,
                 "SAFETY_SCORE": round(item.safety_score, 1),
+                "MOTION_SCORE": round(item.motion_score, 3),
+                "DETAIL_SCORE": round(item.detail_score, 3),
+                "SECTION_CUE": item.section_cue,
+                "ACTION_START_30FPS": frame_to_timecode(item.action_start_frame)
+                if item.action_start_frame is not None
+                else "",
+                "ACTION_END_30FPS": frame_to_timecode(item.action_end_frame)
+                if item.action_end_frame is not None
+                else "",
                 "CONFIDENCE": item.confidence,
                 "READING_CPS": item.reading_cps,
                 "READING_STATUS": item.reading_status,

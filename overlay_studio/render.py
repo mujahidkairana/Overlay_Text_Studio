@@ -30,16 +30,142 @@ def _filter_path(path: str | Path) -> str:
     return text
 
 
-def _video_filter(ass_path: Path, settings: ProjectSettings) -> str:
-    scale = (
+def _relative_action_intervals(
+    entries: Iterable[OverlayEntry],
+    action: str,
+    *,
+    window_start_frame: int,
+    window_end_frame: int,
+    fps: int,
+) -> list[tuple[float, float]]:
+    intervals: list[tuple[float, float]] = []
+    for entry in entries:
+        if not entry.enabled or entry.visual_action != action:
+            continue
+        action_start = entry.action_start_frame or entry.start_frame
+        action_end = entry.action_end_frame if entry.action_end_frame > action_start else entry.end_frame
+        start = max(window_start_frame, action_start)
+        end = min(window_end_frame, action_end)
+        if end > start:
+            intervals.append(((start - window_start_frame) / fps, (end - window_start_frame) / fps))
+    return intervals
+
+
+def _between_expression(intervals: list[tuple[float, float]]) -> str:
+    if not intervals:
+        return "0"
+    return "+".join(f"between(t\\,{start:.6f}\\,{end:.6f})" for start, end in intervals)
+
+
+def _base_video_filter(settings: ProjectSettings) -> str:
+    return (
         f"fps={settings.fps},"
         f"scale={settings.output_width}:{settings.output_height}:force_original_aspect_ratio=decrease:flags=lanczos,"
         f"pad={settings.output_width}:{settings.output_height}:(ow-iw)/2:(oh-ih)/2:color=black"
     )
+
+
+def _post_scale_filters(
+    ass_path: Path,
+    settings: ProjectSettings,
+    entries: Iterable[OverlayEntry] = (),
+    *,
+    window_start_frame: int = 0,
+    window_end_frame: int | None = None,
+) -> list[str]:
+    end_frame = window_end_frame if window_end_frame is not None else 2**31 - 1
+    punch_intervals = _relative_action_intervals(
+        entries, "PUNCH_IN", window_start_frame=window_start_frame,
+        window_end_frame=end_frame, fps=settings.fps,
+    )
+    dim_intervals = _relative_action_intervals(
+        entries, "DIM_FOCUS", window_start_frame=window_start_frame,
+        window_end_frame=end_frame, fps=settings.fps,
+    )
+    effects: list[str] = []
+    if punch_intervals:
+        active = _between_expression(punch_intervals)
+        zoom = f"1+0.05*min(1\\,{active})"
+        effects.extend(
+            [
+                f"scale=w='iw*({zoom})':h='ih*({zoom})':eval=frame",
+                f"crop={settings.output_width}:{settings.output_height}:(iw-ow)/2:(ih-oh)/2",
+            ]
+        )
+    if dim_intervals:
+        active = _between_expression(dim_intervals)
+        effects.append(f"eq=brightness='-0.06*min(1\\,{active})':eval=frame")
     ass_filter = f"ass=filename='{_filter_path(ass_path)}'"
     if settings.font_file:
         ass_filter += f":fontsdir='{_filter_path(Path(settings.font_file).resolve().parent)}'"
-    return scale + "," + ass_filter
+    return [*effects, ass_filter]
+
+
+def _video_filter(
+    ass_path: Path,
+    settings: ProjectSettings,
+    entries: Iterable[OverlayEntry] = (),
+    *,
+    window_start_frame: int = 0,
+    window_end_frame: int | None = None,
+) -> str:
+    return ",".join(
+        [
+            _base_video_filter(settings),
+            *_post_scale_filters(
+                ass_path, settings, entries,
+                window_start_frame=window_start_frame,
+                window_end_frame=window_end_frame,
+            ),
+        ]
+    )
+
+
+def _freeze_filter_complex(
+    ass_path: Path,
+    settings: ProjectSettings,
+    entries: Iterable[OverlayEntry],
+    *,
+    window_start_frame: int,
+    window_end_frame: int,
+) -> str | None:
+    intervals = _relative_action_intervals(
+        entries, "FREEZE", window_start_frame=window_start_frame,
+        window_end_frame=window_end_frame, fps=settings.fps,
+    )
+    if not intervals:
+        return None
+    total_frames = window_end_frame - window_start_frame
+    chains = [f"[0:v]{_base_video_filter(settings)}[freeze_base]"]
+    current = "freeze_base"
+    for index, (start_seconds, end_seconds) in enumerate(intervals):
+        start = max(0, round(start_seconds * settings.fps))
+        end = min(total_frames, round(end_seconds * settings.fps))
+        hold = max(1, end - start)
+        part_specs: list[tuple[str, str]] = []
+        if start > 0:
+            part_specs.append(("pre", f"trim=start_frame=0:end_frame={start},setpts=PTS-STARTPTS"))
+        part_specs.append(("hold", f"trim=start_frame={start}:end_frame={start + 1},setpts=PTS-STARTPTS,loop=loop={hold - 1}:size=1:start=0,trim=end_frame={hold},setpts=PTS-STARTPTS"))
+        if end < total_frames:
+            part_specs.append(("post", f"trim=start_frame={end},setpts=PTS-STARTPTS"))
+        split_labels = "".join(f"[fr_{index}_{name}_src]" for name, _ in part_specs)
+        chains.append(f"[{current}]split={len(part_specs)}{split_labels}")
+        output_labels = []
+        for name, filters in part_specs:
+            output = f"fr_{index}_{name}"
+            chains.append(f"[fr_{index}_{name}_src]{filters}[{output}]")
+            output_labels.append(f"[{output}]")
+        current = f"freeze_{index}"
+        chains.append(f"{''.join(output_labels)}concat=n={len(output_labels)}:v=1:a=0[{current}]")
+    post = ",".join(
+        _post_scale_filters(
+            ass_path, settings, entries,
+            window_start_frame=window_start_frame,
+            window_end_frame=window_end_frame,
+        )
+    )
+    chains.append(f"[{current}]{post}[vout]")
+    return ";".join(chains)
 
 
 def _encoder_args(settings: ProjectSettings) -> list[str]:
@@ -207,6 +333,7 @@ def render_clip(
     progress: ProgressCallback | None = None,
     cancel_check: CancelCheck | None = None,
 ) -> Path:
+    entries = list(entries)
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     workspace = Path(work_dir)
@@ -224,6 +351,10 @@ def render_clip(
         raise MediaError("Render range is empty.")
     temporary = destination.with_suffix(destination.suffix + ".part.mp4")
     temporary.unlink(missing_ok=True)
+    filter_complex = _freeze_filter_complex(
+        ass_path, settings, entries,
+        window_start_frame=start_frame, window_end_frame=end_frame,
+    )
     command = [
         ffmpeg_path(app_root),
         "-hide_banner",
@@ -236,12 +367,23 @@ def render_clip(
         str(Path(video_path).resolve()),
         "-t",
         f"{duration:.9f}",
-        "-map",
-        "0:v:0",
     ]
+    command += ["-map", "[vout]" if filter_complex else "0:v:0"]
     if include_audio:
         command += ["-map", "0:a:0?"]
-    command += ["-vf", _video_filter(ass_path, settings)]
+    if filter_complex:
+        command += ["-filter_complex", filter_complex]
+    else:
+        command += [
+            "-vf",
+            _video_filter(
+            ass_path,
+            settings,
+            entries,
+            window_start_frame=start_frame,
+            window_end_frame=end_frame,
+            ),
+        ]
     command += _encoder_args(settings)
     command += [
         "-pix_fmt",
@@ -426,6 +568,88 @@ def _concat_chunks(
         raise MediaError(completed.stderr.strip() or "Could not join rendered chunks.")
 
 
+def _sfx_roots(
+    settings: ProjectSettings,
+    project_dir: Path,
+    app_root: str | Path | None,
+) -> list[Path]:
+    roots: list[Path] = []
+    if settings.sfx_folder:
+        roots.append(Path(settings.sfx_folder).expanduser())
+    roots.append(project_dir / "sfx")
+    if app_root:
+        roots.append(Path(app_root) / "assets" / "sfx")
+    return roots
+
+
+def _has_license_note(root: Path) -> bool:
+    return any((root / name).is_file() for name in ("README.md", "LICENSES.txt", "LICENSE.txt"))
+
+
+def validate_sfx_assets(
+    entries: Iterable[OverlayEntry],
+    settings: ProjectSettings,
+    project_dir: str | Path,
+    app_root: str | Path | None,
+) -> list[str]:
+    warnings: list[str] = []
+    roots = _sfx_roots(settings, Path(project_dir), app_root)
+    requested = sorted(
+        {entry.sfx for entry in entries if entry.enabled and entry.sfx not in {"", "NONE", "AUTO"}}
+    )
+    for name in requested:
+        filename = name.lower() + ".wav"
+        matching = [root for root in roots if (root / filename).is_file()]
+        if not matching:
+            warnings.append(f"SFX {name}: {filename} was not found; no sound will be added.")
+        elif not any(_has_license_note(root) for root in matching):
+            warnings.append(
+                f"SFX {name}: add README.md or LICENSES.txt beside the WAV; unlicensed sound will be skipped."
+            )
+    return warnings
+
+
+def _resolve_sfx_events(
+    entries: Iterable[OverlayEntry],
+    settings: ProjectSettings,
+    project_dir: Path,
+    app_root: str | Path | None,
+) -> list[tuple[Path, int]]:
+    roots = _sfx_roots(settings, project_dir, app_root)
+    events: list[tuple[Path, int]] = []
+    for entry in entries:
+        if not entry.enabled or entry.sfx in {"", "NONE", "AUTO"}:
+            continue
+        filename = entry.sfx.lower() + ".wav"
+        asset = next(
+            (
+                root / filename for root in roots
+                if (root / filename).is_file() and _has_license_note(root)
+            ),
+            None,
+        )
+        if asset is not None:
+            events.append((asset, round(entry.start_frame / 30.0 * 1000)))
+    return events
+
+
+def _sfx_mix_filter(events: list[tuple[Path, int]]) -> tuple[list[str], str]:
+    chains: list[str] = []
+    labels: list[str] = []
+    for index, (_, delay_ms) in enumerate(events):
+        input_index = index + 2
+        label = f"sfx_{index}"
+        chains.append(
+            f"[{input_index}:a]volume=0.12,adelay={delay_ms}:all=1[{label}]"
+        )
+        labels.append(f"[{label}]")
+    chains.append(
+        f"[1:a]{''.join(labels)}amix=inputs={len(labels) + 1}:duration=first:"
+        "dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]"
+    )
+    return chains, "[aout]"
+
+
 def render_full_resumable(
     video: VideoInfo,
     entries: list[OverlayEntry],
@@ -491,6 +715,7 @@ def render_full_resumable(
     temporary = destination.with_suffix(destination.suffix + ".part.mp4")
     temporary.unlink(missing_ok=True)
     if video.has_audio:
+        sfx_events = _resolve_sfx_events(entries, settings, project, app_root)
         command = [
             ffmpeg_path(app_root),
             "-hide_banner",
@@ -501,10 +726,16 @@ def render_full_resumable(
             str(video_only),
             "-i",
             video.path,
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0?",
+        ]
+        for asset, _ in sfx_events:
+            command += ["-i", str(asset)]
+        command += ["-map", "0:v:0"]
+        if sfx_events:
+            mix_chains, audio_label = _sfx_mix_filter(sfx_events)
+            command += ["-filter_complex", ";".join(mix_chains), "-map", audio_label]
+        else:
+            command += ["-map", "1:a:0?"]
+        command += [
             "-c:v",
             "copy",
             "-c:a",

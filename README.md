@@ -1,4 +1,4 @@
-# Overlay Text Studio v2.3
+# Overlay Text Studio v3.0
 
 ## Development branches
 
@@ -45,7 +45,7 @@ Overlay Text Studio is a local Windows app for polished animated text overlays o
 2. Double-click `SETUP_ONCE.bat`.
 3. Choose a drive/folder for `Shared_Components` when asked. No administrator permission is required.
 4. When setup finishes, double-click `START_APP.bat`.
-5. In the app, download the sample timing template or select your own CSV/XLSX.
+5. Select the final video, its SRT subtitles, and an overlay CSV/XLSX.
 
 Normal use is fully offline after setup. Keep `Shared_Components` available because the app runtime and FFmpeg may be stored there.
 
@@ -65,7 +65,11 @@ Run `CHECK_SETUP.bat` to verify Python packages, both FFmpeg tools, the ASS text
 
 ## Timing input
 
-Use the in-app **Download sample timing template** button or `templates/overlay_template.csv`.
+Use the in-app **Download complete AI-ready timing template** button or
+`templates/overlay_template.csv`. It demonstrates every supported semantic type,
+priority, visual action, style lock, emphasis, and local SFX convention. When an
+AI model is generating the timing sheet, give it both the CSV and
+`templates/AI_TEMPLATE_GUIDE.md`.
 
 | Column | Required | Example |
 | --- | --- | --- |
@@ -74,17 +78,38 @@ Use the in-app **Download sample timing template** button or `templates/overlay_
 | `END_TIME_30FPS` | Yes | `00:01:16.20` |
 | `ON_SCREEN_TEXT` | Yes | `THE CLUE WAS HIDDEN` |
 
+Legacy four-column files remain supported. These optional columns add explicit
+editorial intent without requiring any cloud service:
+
+| Optional column | Default | Example |
+| --- | --- | --- |
+| `TYPE` | Deterministic `QUESTION`/`NUMBER`/`FACT` classification | `EVIDENCE` |
+| `PRIORITY` | `MEDIUM` | `HIGH` |
+| `EMPHASIS_WORD` | Existing local accent heuristic | `WATER` |
+| `VISUAL_ACTION` | `AUTO` | `PUNCH_IN` |
+| `SFX` | `NONE` | `SOFT_HIT` |
+| `LOCK_STYLE` | `FALSE` | `TRUE` |
+
+`VISUAL_ACTION` supports timing-safe `PUNCH_IN`, `DIM_FOCUS`, and in-place
+`FREEZE` treatments. `SFX` uses optional local WAV files only; nothing is
+downloaded during normal use. In the app, an optional licensed SFX folder can
+be selected once; it must contain `README.md`, `LICENSES.txt`, or `LICENSE.txt`
+alongside its WAV files so the sound source remains auditable.
+
 Start is inclusive and end is exclusive. Frame fields must be `00–29`. Integer frame numbers are also accepted. Explicit `\N` or spreadsheet line breaks are allowed for a maximum of two lines; a third line is rejected with a clear row error instead of being silently removed.
 
 ## Recommended workflow
 
-1. Select the source video and timing sheet.
-2. Click **Create final YouTube video automatically**. Validation, native
+1. Select the final video, SRT subtitles, and overlay timing sheet.
+2. Click **AUTO ENHANCE VIDEO**. Validation, subtitle reading-load checks, native
    resolution selection, sizing, parallel safe placement, professional styling,
    rendering, and verification run without intermediate questions.
 3. Optional manual review and preview controls remain available after completion.
 
 Use **Continue an existing project** and select its `project.json` to resume later. The saved random seed and styles are restored, so unchanged chunks remain reusable. If a render is stopped, start the same export again to reuse completed chunks.
+
+SRT is used only for timing/context and reading-load warnings. The app does not
+burn a duplicate subtitle layer, and the lower caption-safe area remains protected.
 
 ## Visual rules
 
@@ -102,6 +127,19 @@ Use **Continue an existing project** and select its `project.json` to resume lat
 - Reading speed is measured; overly dense text receives a protected contrast plate.
 - Text normally uses one or two balanced lines. Very long lines can shrink to about 69 px at 4K and are flagged to shorten.
 - Entrance motion is short, rest time is dominant, and exit is a restrained fade.
+- A cached FFmpeg hard-cut pass prevents strong motion from crossing scene boundaries.
+- Calm, Standard, and Energetic density presets enforce cooldowns and quiet intervals.
+- The planner targets 4-7 editorial events per rolling minute, reports unavoidable
+  over-target source overlays, and limits strong actions and SFX separately.
+- Long SRT pauses can promote an existing nearby overlay to a section cue; the app
+  never invents narration or overlay wording.
+- Measured motion and image detail automatically suppress aggressive effects.
+- Number, evidence, comparison, warning, uncertainty, takeaway, question, and
+  section overlays receive distinct restrained treatments.
+- Punch-ins are limited to a subtle 5%; focus dimming is mild and temporary.
+- Freeze emphasis replaces frames inside the existing timeline and never adds duration.
+- Optional local SFX are mixed quietly below narration with limiter protection.
+- `editorial_plan.json` and the in-app Creative Variation Report summarize editing patterns.
 
 ## Font-size guide at 4K
 
@@ -140,4 +178,8 @@ set /p RUNTIME_ROOT=<runtime_path.txt
 "%RUNTIME_ROOT%\Scripts\python.exe" -m unittest discover -s tests -v
 ```
 
-The suite covers exact 30-fps timing, three-line rejection, seeded randomization, dynamic safe-zone width, project seed restoration, unlimited port fallback, resume-safe chunking, rendering, full-duration short-audio remux, final frame count, and shared setup precedence.
+The suite covers SRT parsing, legacy/rich overlay schemas, scene-cut detection,
+density cooldowns, exact 30-fps timing, punch-in frame counts, multiple in-place
+freezes in one chunk, licensed SFX validation and mixing, resumable rendering,
+final verification, real branch creation/collision behavior, portable setup,
+Streamlit startup, and a real 10-minute 18,000-frame acceptance render.

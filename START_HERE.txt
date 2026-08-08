@@ -1,4 +1,4 @@
-OVERLAY TEXT STUDIO v2.2 - START HERE
+OVERLAY TEXT STUDIO v3.0 - START HERE
 
 FRESH GITHUB CLONE / FIRST TIME
 1. Clone or download this repository to any normal folder.
@@ -10,11 +10,17 @@ Generated runtime pointers, logs, caches, and video outputs are local machine
 state and are intentionally excluded from Git.
 
 EVERYDAY USE
-1. Select the source video and timing CSV/XLSX.
-2. Click "Create final YouTube video automatically".
-3. The app analyzes, styles, renders, and verifies the result without stopping
+1. Select the final video, subtitle SRT, and overlay timing CSV/XLSX.
+2. Click "AUTO ENHANCE VIDEO".
+3. The app validates subtitle reading load, analyzes, styles, renders, and verifies the result without stopping
    for intermediate questions.
 4. Rendering continues in the background. Stop/Resume preserves valid chunks.
+5. Open "Creative Variation Report" to review event density and effect usage.
+
+OPTIONAL LOCAL SFX
+Choose a licensed local SFX folder in the app, or place licensed WAV files in
+assets\sfx. The folder must also contain README.md, LICENSES.txt, or LICENSE.txt.
+Missing or unlicensed files are skipped safely and never downloaded automatically.
 
 CONTINUE LATER
 Open the saved project.json from "Continue an existing project".

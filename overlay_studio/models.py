@@ -14,6 +14,12 @@ ANIMATIONS = (
     "FADE_ONLY",
 )
 EFFECTS = ("CLEAN_SHADOW", "ACCENT_WORD", "PROTECTED_PLATE", "STRONG_OUTLINE")
+SEMANTIC_TYPES = (
+    "QUESTION", "FACT", "NUMBER", "EVIDENCE", "COMPARISON",
+    "WARNING", "UNCERTAINTY", "TAKEAWAY", "SECTION",
+)
+PRIORITIES = ("LOW", "MEDIUM", "HIGH")
+VISUAL_ACTIONS = ("AUTO", "NONE", "PUNCH_IN", "DIM_FOCUS", "FREEZE")
 
 
 @dataclass(slots=True)
@@ -49,6 +55,15 @@ class OverlayEntry:
     note: str = ""
     lock_style: bool = False
     accent_word: str = ""
+    semantic_type: str = "FACT"
+    priority: str = "MEDIUM"
+    visual_action: str = "AUTO"
+    sfx: str = "NONE"
+    action_start_frame: int = 0
+    action_end_frame: int = 0
+    section_cue: bool = False
+    motion_score: float = 0.0
+    detail_score: float = 0.0
     reading_cps: float = 0.0
     reading_status: str = "NOT_CHECKED"
 
@@ -92,6 +107,9 @@ class ProjectSettings:
     keep_analysis_frames: bool = True
     style_preset: str = "YOUTUBE_PRO"
     parallel_analysis_workers: int = 4
+    scene_cut_frames: list[int] = field(default_factory=list)
+    density_preset: str = "STANDARD"
+    sfx_folder: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

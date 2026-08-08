@@ -1,29 +1,53 @@
-OVERLAY TEXT STUDIO v2.3.0 — QA SUMMARY
+OVERLAY TEXT STUDIO v3.0.0 - QA SUMMARY
 
-AUTOMATED REGRESSION SUITE
-- 25 tests passed.
-- Python source compilation passed.
-- Streamlit clean-start smoke test passed with zero UI exceptions.
-- Blank-input validation shows a friendly source-video message.
+IMPLEMENTED PHASES
+- Phase 0: repository-wide daily branch sequencing and collision checks.
+- Phase 1: SRT input/parser, rich overlay schema, and backward-compatible persistence.
+- Phase 2: cached FFmpeg hard scene-cut detection.
+- Phase 3: deterministic semantic planning, density presets, cooldowns, and reporting.
+- Phase 4: timing-safe subtle punch-in and mild temporary dim/focus.
+- Phase 5: in-place freeze, optional local SFX, section treatment, and variation report.
+- Phase 6: regression, Windows smoke checks, UI smoke, and documentation.
 
-FIXED RELEASE BLOCKERS
-- Short source audio no longer truncates a longer video.
-- 10-second / 5-second-audio regression produced 300 frames at 30 fps.
-- Existing project.json can be reopened; saved seed and styles are restored.
-- Safe-zone width follows the real text footprint instead of a fixed 29% box.
-- Three explicit lines are rejected clearly; no silent third-line loss.
-- Face detector and per-frame face results are cached.
-- Port search continues past 8503 and reuses a healthy running instance.
-- Streamlit development mode is explicitly disabled.
-- Both FFmpeg and FFprobe are checked.
-- Persistent setup/server logs and a diagnostic ZIP are available.
-- Disk-space and overwrite checks run before export.
-- Final MP4 is verified before success is shown.
-- Sample timing template is downloadable inside the app.
-- Advanced controls are collapsed for a cleaner first-use screen.
+AUTOMATED AND RENDER VALIDATION
+- Full 61-test unittest suite passes on the bundled Windows runtime.
+- Headless Streamlit startup completes with zero UI exceptions.
+- Real FFmpeg hard-cut test detects a black-to-white cut and reuses its cache.
+- Punch-in render preserves exactly 60 frames for a 2-second 30-fps clip.
+- In-place freeze preserves 2.0-second duration, 60 frames, and source audio.
+- Multiple freezes in one chunk preserve exact duration, 120 frames, and audio.
+- Local SFX mix preserves source duration and audio, uses 12% gain, and applies a limiter.
+- User SFX folders require WAV files plus a README/license record.
+- A real 10-minute acceptance render preserves 600 seconds, 18,000 frames, and audio.
+- The branch helper is tested against real local/bare repositories, increments
+  across features, rejects collisions, and emits slash-separated Windows dates.
+- End-to-end resumable render and short-source-audio regressions pass.
+- Final verification still checks duration, FPS, dimensions, and expected audio.
 
-WINDOWS-SPECIFIC FINAL CHECK
-The PowerShell bootstrap is included and its decision branches are regression-checked.
-Because this QA environment is Linux, double-click behavior, Windows Folder Browser,
-Authenticode verification, and the actual Windows installer UI should still receive
-one smoke test on the target Windows PC before production use.
+BACKWARD COMPATIBILITY
+- Legacy four-column CSV/XLSX inputs remain supported.
+- Old project.json files without srt_path or editorial fields reopen successfully.
+- Existing caption-safe top placement, encoder selection, and chunk resume remain active.
+
+OFFLINE / SAFETY CHECK
+- Normal use requires no cloud API, API key, LLM, generative model, or download.
+- Scene analysis and effects use local FFmpeg/OpenCV only.
+- The lower subtitle band remains protected even during SRT gaps.
+- Source audio is not ducked; optional local WAV SFX are mixed conservatively on top.
+- Missing optional SFX assets fall back safely to no added sound.
+
+EDITORIAL / VIEWER ACCEPTANCE
+- All specified semantic types have distinct, restrained visual treatments.
+- Long SRT gaps promote suitable existing overlays into section cues without
+  generating new claims or wording.
+- Measured motion/detail scores suppress strong effects in visually busy shots.
+- Rolling event density targets 4-7 per minute and reports over-target source data.
+- Calm/Standard/Energetic presets cap strong actions and SFX independently.
+- Resolved plan exports include action frames, section cues, motion, and detail scores.
+- A real-footage contact sheet was visually inspected for hierarchy, centering,
+  rounded-plate coverage, contrast, consistency, and caption-safe placement.
+
+WINDOWS SMOKE STATUS
+- Tests ran on Windows using the application's configured shared Python and FFmpeg.
+- Streamlit widget construction, FFmpeg filters, hard-cut cache, punch-in, freeze,
+  SFX mix, frame count, duration, and audio presence were exercised locally.

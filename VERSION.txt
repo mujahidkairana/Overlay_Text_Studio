@@ -1,2 +1,2 @@
-Overlay Text Studio v2.3.0
-Background rendering, automatic encoder benchmark, and viewer QA
+Overlay Text Studio v3.0.0
+Offline SRT-aware editorial planning, scene-safe effects, freeze, and local SFX
