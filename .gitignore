@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local runtime and machine-specific setup pointers
+runtime_path.txt
+shared_components_path.txt
+
+# Generated application state
+logs/
+work/
+*.log
+
+# Generated video/project outputs
+*.mp4
+*.mov
+*.mkv
+*.m4v
+resolved_overlay_plan.csv
+resolved_overlay_plan.xlsx
+resolved_overlay_plan.ass
+overlay_qa_report.json
+final_verification.json
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Optional locally bundled tools (keep instructions)
+tools/*.exe
+tools/ffmpeg/
+!tools/PUT_FFMPEG_HERE.txt

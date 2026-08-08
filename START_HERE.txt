@@ -1,0 +1,22 @@
+OVERLAY TEXT STUDIO v2.1 - START HERE
+
+FRESH GITHUB CLONE / FIRST TIME
+1. Clone or download this repository to any normal folder.
+2. Double-click SETUP_ONCE.bat.
+3. Accept the default component location, or choose another local folder.
+4. Double-click START_APP.bat.
+
+Generated runtime pointers, logs, caches, and video outputs are local machine
+state and are intentionally excluded from Git.
+
+EVERYDAY USE
+1. Select the source video and timing CSV/XLSX.
+2. Click "Create automatic overlay plan".
+3. Preview if desired.
+4. Export the verified final MP4.
+
+CONTINUE LATER
+Open the saved project.json from "Continue an existing project".
+The saved styles, analysis frames, and valid render chunks are reused.
+
+Normal app use is offline after setup.

@@ -1,0 +1,10 @@
+For a fully portable Windows folder, put either:
+
+1) tools\ffmpeg.exe and tools\ffprobe.exe
+
+or:
+
+2) tools\ffmpeg\bin\ffmpeg.exe and tools\ffmpeg\bin\ffprobe.exe
+
+If FFmpeg is already available in Windows PATH, no copy is needed.
+

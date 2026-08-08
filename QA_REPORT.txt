@@ -1,0 +1,29 @@
+OVERLAY TEXT STUDIO v2.1.0 — QA SUMMARY
+
+AUTOMATED REGRESSION SUITE
+- 18 tests passed.
+- Python source compilation passed.
+- Streamlit clean-start smoke test passed with zero UI exceptions.
+- Blank-input validation shows a friendly source-video message.
+
+FIXED RELEASE BLOCKERS
+- Short source audio no longer truncates a longer video.
+- 10-second / 5-second-audio regression produced 300 frames at 30 fps.
+- Existing project.json can be reopened; saved seed and styles are restored.
+- Safe-zone width follows the real text footprint instead of a fixed 29% box.
+- Three explicit lines are rejected clearly; no silent third-line loss.
+- Face detector and per-frame face results are cached.
+- Port search continues past 8503 and reuses a healthy running instance.
+- Streamlit development mode is explicitly disabled.
+- Both FFmpeg and FFprobe are checked.
+- Persistent setup/server logs and a diagnostic ZIP are available.
+- Disk-space and overwrite checks run before export.
+- Final MP4 is verified before success is shown.
+- Sample timing template is downloadable inside the app.
+- Advanced controls are collapsed for a cleaner first-use screen.
+
+WINDOWS-SPECIFIC FINAL CHECK
+The PowerShell bootstrap is included and its decision branches are regression-checked.
+Because this QA environment is Linux, double-click behavior, Windows Folder Browser,
+Authenticode verification, and the actual Windows installer UI should still receive
+one smoke test on the target Windows PC before production use.

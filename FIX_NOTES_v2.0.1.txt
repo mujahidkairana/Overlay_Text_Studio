@@ -1,0 +1,12 @@
+Overlay Text Studio v2.0.1
+
+FIXED
+- StreamlitAPIException when using Browse for Source video.
+- The same underlying issue could also affect timing, output-folder, and project-file Browse controls.
+- Browse is now processed before the keyed text input is instantiated, so Streamlit session_state can be updated safely.
+
+VALIDATION
+- Python syntax compilation: passed.
+- Existing automated test suite: 14/14 passed.
+
+No rendering, timing, overlay-style, or setup behavior was intentionally changed.

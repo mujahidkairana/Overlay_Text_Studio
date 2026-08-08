@@ -1,0 +1,8 @@
+# Direct dependency versions verified by the Overlay Text Studio v2 QA suite.
+streamlit==1.61.1
+pandas==2.3.3
+numpy==2.5.1
+Pillow==12.3.0
+openpyxl==3.1.5
+opencv-python-headless==4.14.0.94
+
