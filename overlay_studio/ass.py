@@ -11,6 +11,12 @@ from PIL import ImageFont
 from .models import OverlayEntry, ProjectSettings
 
 
+# ASS/libass font-size coordinates render smaller than Pillow's pixel-size
+# coordinates because font ascent/descent are handled differently. Calibrated
+# against Segoe UI Semibold output so plates follow visible glyph bounds.
+ASS_FONT_METRIC_SCALE = 0.72
+
+
 def _ass_color(hex_color: str, alpha: int = 0) -> str:
     clean = hex_color.strip().lstrip("#")
     if len(clean) != 6 or not re.fullmatch(r"[0-9A-Fa-f]{6}", clean):
@@ -176,11 +182,11 @@ def _estimated_text_width(
     font = _load_measurement_font(settings.font_file if settings else "", font_size)
     if font is not None:
         left, _, right, _ = font.getbbox(text)
-        width = right - left
+        width = round((right - left) * ASS_FONT_METRIC_SCALE)
     else:
         width = round(sum(
-            0.32 if character in " !'.,:;Iijl|1" else
-            0.76 if character in "MW@%#QO" else 0.56
+            0.28 if character in " !'.,:;Iijl|1" else
+            0.66 if character in "MW@%#QO" else 0.45
             for character in text
         ) * font_size)
     if settings is not None:
@@ -235,7 +241,7 @@ def _protected_plate_geometry(
     lines = (entry.wrapped_text or entry.text).split("\\N")
     font_size = max(1, entry.font_size_px)
     scale = settings.output_height / 1080.0
-    horizontal_padding = max(round(22 * scale), round(font_size * 0.25))
+    horizontal_padding = max(round(22 * scale), round(font_size * 0.18))
     vertical_padding = max(round(12 * scale), round(font_size * 0.15))
     rendered_widths = _rendered_line_widths(entry, settings)
     width = max(rendered_widths)
